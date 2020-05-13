@@ -59,7 +59,7 @@ def get_logger(exp_version):
     return getLogger(exp_version)
 
     
-def main(config):    
+def main(config):
     VERSION = str(config.version)  # 実験番号
     create_logger(VERSION)
     get_logger(VERSION).info(config)
@@ -181,7 +181,7 @@ def main(config):
     # - bioelmo: hdf5ファイル. CNN, BiLSTMモデルの重みを格納している
     
     DIR_ELMo = Path('/home/nakamura/bioelmo')
-    bioelmo = Elmo(DIR_ELMo / 'options.json', DIR_ELMo / 'bioelmo', 1, requires_grad=False, dropout=0)
+    bioelmo = Elmo(DIR_ELMo / 'options.json', DIR_ELMo / 'bioelmo', 1, requires_grad=bool(config.fine_tune_bioelmo), dropout=0)
     
     
     # # 2. CRF
@@ -230,6 +230,7 @@ def main(config):
             """
             self.text_files = text_files
             self.token_files = token_files
+            self.pmids = [re.compile(r'/([0-9]+)[^0-9]+').findall(path)[0] for path in self.text_files]
             self.p_files = p_files
             self.i_files = i_files
             self.o_files = o_files
@@ -254,6 +255,8 @@ def main(config):
         def __getitem__(self, idx):
             returns = {}
             
+            returns['pmid'] = self.pmids[idx] 
+
             with open(self.text_files[idx]) as f:
                 # Raw document. Example:
                 # [Triple therapy regimens involving H2 blockaders for therapy of Helicobacter pylori infections].
@@ -333,7 +336,7 @@ def main(config):
     
     
     # ### 3-3. DataLoader
-    BATCH_SIZE = 16
+    BATCH_SIZE = int(config.batch_size)
     
     dl_train = torch.utils.data.DataLoader(ds_train, batch_size=BATCH_SIZE, shuffle=True)
     dl_val = torch.utils.data.DataLoader(ds_val, batch_size=BATCH_SIZE, shuffle=False)
@@ -358,8 +361,25 @@ def main(config):
     
         def get_device(self):
             return self.crf.state_dict()['transitions'].device
-        
-        
+       
+
+        def get_version(self):
+            save_dir_root = Path(self.logger.experiment.save_dir) / self.logger.experiment.name
+            n_last_version = -1
+            while True:
+                if os.path.exists(save_dir_root / f'version_{n_last_version+1}'):
+                    n_last_version += 1
+                else:
+                    break
+            return n_last_version
+
+      
+        def get_media_dir(self):
+            save_dir_root = Path(self.logger.experiment.save_dir) / self.logger.experiment.name
+            save_dir = Path(save_dir_root / f'version_{self.get_version()}' / 'media')
+            return save_dir 
+       
+       
         def id_to_tag(self, T_padded, Y_packed):
             """
             T_padded: torch.tensor
@@ -368,10 +388,14 @@ def main(config):
             Y_padded, Y_len = rnn.pad_packed_sequence(Y_packed, batch_first=True, padding_value=-1)
             Y_padded = Y_padded.numpy().tolist()
             Y_len = Y_len.numpy().tolist()
-            Y = [[self.itol[ix] for ix in ids[:length]] for ids, length in zip(Y_padded, Y_len)]
+
+            # Replace B- tag with I- tag because the original paper defines the NER task as identification of spans, not entities
+            Y = [[self.itol[ix].replace('B-', 'I-') for ix in ids[:length]] for ids, length in zip(Y_padded, Y_len)]
     
             T_padded = T_padded.numpy().tolist()
-            T = [[self.itol[ix] for ix in ids[:length]] for ids, length in zip(T_padded, Y_len)]
+
+            # Replace B- tag with I- tag because the original paper defines the NER task as identification of spans, not entities
+            T = [[self.itol[ix].replace('B-', 'I-') for ix in ids[:length]] for ids, length in zip(T_padded, Y_len)]
             
             return T, Y
         
@@ -399,7 +423,7 @@ def main(config):
             return log_prob, Y
     
         
-        def training_step(self, batch, batch_nb):
+        def training_step(self, batch, batch_nb, *optimizer_idx):
             # Process on individual mini-batches
             """
             (batch) -> (dict or OrderedDict)
@@ -421,7 +445,7 @@ def main(config):
                 
             # Negative Log Likelihood
             log_prob, Y = self.forward(cids, tags, masks)
-            returns = {'loss':log_prob * (-1.0), 'T':tags, 'Y':Y}
+            returns = {'loss':log_prob * (-1.0), 'T':tags, 'Y':Y, 'I':batch['pmid']}
             return returns
         
     
@@ -433,7 +457,7 @@ def main(config):
             loss = torch.mean(outputs['loss'])
             
             progress_bar = {'train_loss':loss}
-            returns = {'loss':loss, 'T':outputs['T'], 'Y':outputs['Y'], 'progress_bar':progress_bar}
+            returns = {'loss':loss, 'T':outputs['T'], 'Y':outputs['Y'], 'I':outputs['I'], 'progress_bar':progress_bar}
             return returns
         
         
@@ -447,6 +471,7 @@ def main(config):
             else:
                 loss = torch.mean(outputs[0]['loss'])
             
+            I = []
             Y = []
             T = []
             
@@ -454,6 +479,7 @@ def main(config):
                 T_batch, Y_batch = self.id_to_tag(output['T'].cpu(), output['Y'].cpu())
                 T += T_batch
                 Y += Y_batch
+                I += output['I'].cpu().numpy().tolist()
     
             get_logger(VERSION).info(f'Training Epoch {self.current_epoch} ==========')
             get_logger(VERSION).info(loss)
@@ -504,6 +530,7 @@ def main(config):
             else:
                 loss = torch.mean(outputs[0]['loss'])
             
+            I = []
             Y = []
             T = []
             
@@ -511,6 +538,7 @@ def main(config):
                 T_batch, Y_batch = self.id_to_tag(output['T'].cpu(), output['Y'].cpu())
                 T += T_batch
                 Y += Y_batch
+                I += output['I'].cpu().numpy().tolist()
                 
             get_logger(VERSION).info(f'Validation Epoch {self.current_epoch} ==========')
             get_logger(VERSION).info(loss)
@@ -523,9 +551,16 @@ def main(config):
     
         
         def configure_optimizers(self):
-            optimizer = optim.Adam(self.parameters(), lr=float(self.config.lr))
-            return optimizer
-        
+            if self.config.fine_tune_bioelmo:
+                optimizer_bioelmo_1 = optim.Adam(self.bioelmo.parameters(), lr=float(self.config.lr_bioelmo))
+                optimizer_bioelmo_2 = optim.Adam(self.hidden_to_tag.parameters(), lr=float(self.config.lr_bioelmo))
+                optimizer_crf = optim.Adam(self.crf.parameters(), lr=float(self.config.lr))
+                return [optimizer_bioelmo_1, optimizer_bioelmo_2, optimizer_crf]
+            else:        
+                optimizer = optim.Adam(self.parameters(), lr=float(self.config.lr))
+                return optimizer
+
+
         def train_dataloader(self):
             return dl_train
         
@@ -537,7 +572,7 @@ def main(config):
     device = torch.device(f'cuda:{config.cuda}')
     ebmnlp.to(device)
     trainer = pl.Trainer(
-        max_epochs=50,
+        max_epochs=int(config.max_epochs),
         train_percent_check=1,
     )
     trainer.fit(ebmnlp)
@@ -549,8 +584,11 @@ if __name__=='__main__':
     def get_args():
         parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
         parser.add_argument('-v', '--version', dest='version', help='Experiment Name')
-        parser.add_argument('-l', '--lr', dest='lr', help='Learning Rate')
-        parser.add_argument('-w', '--wd', '--weight-decay', dest='weight_decay', help='Weight Decay')
+        parser.add_argument('-e', '--max-epochs', dest='max_epochs', default=50, help='Max Epochs')
+        parser.add_argument('-l', '--lr', dest='lr', default=1e-2, help='Learning Rate')
+        parser.add_argument('--fine-tune-bioelmo', action='store_true', dest='fine_tune_bioelmo', help='Whether to Fine Tune BioELMo')
+        parser.add_argument('--lr-bioelmo', dest='lr_bioelmo', default=1e-4, help='Learning Rate in BioELMo Fine-tuning')
+        parser.add_argument('-b', '--batch-size', dest='batch_size', default=16, help='Batch size (Default: 16)')
         parser.add_argument('-c', '--cuda', dest='cuda', help='CUDA Device Number')
         args = parser.parse_args()
         return args
