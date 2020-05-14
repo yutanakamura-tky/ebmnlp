@@ -11,7 +11,6 @@ import os, random
 import re
 from pathlib import Path
 from glob import glob
-from sklearn.metrics import cohen_kappa_score, precision_score, recall_score, precision_recall_fscore_support
 
 import numpy as np
 import torch
@@ -23,13 +22,19 @@ import subprocess
 import shlex
 
 from sklearn.model_selection import train_test_split
-from seqeval.metrics import accuracy_score, f1_score, classification_report
+from sklearn.metrics import cohen_kappa_score, precision_score, recall_score, precision_recall_fscore_support
+from sklearn.metrics import classification_report
+from seqeval.metrics import accuracy_score as seq_accuracy_score
+from seqeval.metrics import f1_score as seq_f1_score
+from seqeval.metrics import classification_report as seq_classification_report
 
 from tqdm import tqdm_notebook as tqdm
 import pytorch_lightning as pl
 
 from logging import getLogger, Formatter, FileHandler, StreamHandler, INFO, DEBUG
 
+
+# ### 0-2. Prepare for logging
 
 def create_logger(exp_version):
     log_file = ("{}.log".format(exp_version))
@@ -58,13 +63,144 @@ def create_logger(exp_version):
 def get_logger(exp_version):
     return getLogger(exp_version)
 
+
+# ### 1. Dataset
+class EBMNLPDataset(torch.utils.data.Dataset):
+    def __init__(self, text_files, token_files, p_files, i_files, o_files, max_length, pad_token):
+        """
+        text_files: list(str)
+        token_files: list(str)
+        p_files: list(str)
+        i_files: list(str)
+        o_files: list(str)
+        """
+        self.text_files = text_files
+        self.token_files = token_files
+        self.pmids = [int(re.compile(r'/([0-9]+)[^0-9]+').findall(path)[0]) for path in self.text_files]
+        self.p_files = p_files
+        self.i_files = i_files
+        self.o_files = o_files
+        assert len(text_files) == len(token_files) == len(p_files) == len(i_files) == len(o_files), 'All arguments must be lists of the same size'
+        self.n = len(text_files)
+
+        self.itol = {
+            # 'BOS' and 'EOS' are not needed to be explicitly included
+            0:'O', 1:'I-P', 2:'B-P', 3:'I-I', 4:'B-I', 5:'I-O', 6:'B-O'
+        }
+        self.ltoi = {
+            self.itol[i]:i for i in range(len(self.itol))
+        }
+        
+        self.max_length = max_length
+        self.pad_token = pad_token
+
+    def __len__(self):
+        return self.n
+        
     
+    def __getitem__(self, idx):
+        returns = {}
+        
+        returns['pmid'] = self.pmids[idx] 
+
+        with open(self.text_files[idx]) as f:
+            # Raw document. Example:
+            # [Triple therapy regimens involving H2 blockaders for therapy of Helicobacter pylori infections].
+            # Comparison of ranitidine and lansoprazole in short-term low-dose triple therapy for Helicobacter pylori infection. 
+            returns['text'] = f.read()
+    
+        with open(self.token_files[idx]) as f:
+            # Tokenized document. Example:
+            # ['[', 'Triple', 'therapy', 'regimens', 'involving', 'H2', 'blockaders',
+            #  'for', 'therapy', 'of', 'Helicobacter', 'pylori', 'infections', ']', '.',
+            #  'Comparison', 'of', 'ranitidine', 'and', 'lansoprazole', 'in',
+            #  'short-term', 'low-dose', 'triple', 'therapy', 'for',
+            #  'Helicobacter', 'pylori', 'infection', '.', ...
+            tokens = f.read().split()
+            tokens_padded = tokens + [self.pad_token] * (self.max_length - len(tokens))
+            returns['tokens'] = tokens_padded
+    
+        with open(self.p_files[idx]) as f:
+            # sequence of 0 (O-tag) or 1 (I-tag)
+            # e.g., '1,1,0,1,1,0,...'
+            p = f.read()
+            
+        with open(self.i_files[idx]) as f:
+            # sequence of 0 (O-tag) or 1 (I-tag)
+            # e.g., '1,1,0,1,1,0,...'
+            i = f.read()  
+
+        with open(self.o_files[idx]) as f:
+            # sequence of 0 (O-tag) or 1 (I-tag)
+            # e.g., '1,1,0,1,1,0,...'
+            o = f.read()  
+
+
+        # sequence of 0 (O-tag) or 2 (B-P-tag) or 1 (I-P-tag)
+        # e.g., '2,1,0,2,1,0,...'
+        p = re.sub('1', f"{self.ltoi['I-P']}", p)
+        p = re.sub(f"^{self.ltoi['I-P']}", f"{self.ltoi['B-P']}", p)
+        p = re.sub(f"{self.ltoi['O']},{self.ltoi['I-P']}", f"{self.ltoi['O']},{self.ltoi['B-P']}", p)
+        
+        # sequence of 0 (O-tag) or 4 (B-I-tag) or 3 (I-I-tag)
+        # e.g., '4,3,0,4,3,0,...'
+        i = re.sub('1', f"{self.ltoi['I-I']}", i)
+        i = re.sub(f"^{self.ltoi['I-I']}", f"{self.ltoi['B-I']}", i)
+        i = re.sub(f"{self.ltoi['O']},{self.ltoi['I-I']}", f"{self.ltoi['O']},{self.ltoi['B-I']}", i)
+
+        # sequence of 0 (O-tag) or 6 (B-O-tag) or 5 (I-O-tag)
+        # e.g., '6,5,0,6,5,0,...'
+        o = re.sub('1', f"{self.ltoi['I-O']}", o)
+        o = re.sub(f"^{self.ltoi['I-O']}", f"{self.ltoi['B-O']}", o)
+        o = re.sub(f"{self.ltoi['O']},{self.ltoi['I-O']}", f"{self.ltoi['O']},{self.ltoi['B-O']}", o)
+        
+
+        # integrated P, I and O tags        
+        lp = [int(x) for x in p.split(',')]
+        li = [int(x) for x in i.split(',')]
+        lo = [int(x) for x in o.split(',')]
+        tag = torch.tensor(np.max(np.vstack([lp,li,lo]), axis=0))
+
+        seq_len = tag.shape[0]
+        padding = torch.tensor([int(self.ltoi['O'])] * (self.max_length - seq_len))
+        tag_padded = torch.cat([tag, padding])
+        returns['tag'] = tag_padded
+
+        mask = torch.cat([torch.ones_like(tag), torch.zeros_like(padding)]).to(bool)
+        returns['mask'] = mask
+
+        return returns
+
+
+
+def span_classification_report(T, Y, digits=4):
+    """
+    Token-wise metrics of NER IOE1 tagging task.
+    T: list(list(str)) True labels 
+    Y: list(list(str)) Pred labels
+    """
+    T_flatten = []
+    Y_flatten = []
+    n_sample = len(T)
+
+    for i in range(n_sample):
+        T_flatten += [label.replace('B-', 'I-') for label in T[i]]
+        Y_flatten += [label.replace('B-', 'I-') for label in Y[i]]
+
+    label_types = [label_type for label_type in set(T_flatten) if label_type != 'O']
+
+    return classification_report(T_flatten, Y_flatten, labels=label_types, digits=digits)
+
+
+
+# MAIN
 def main(config):
     VERSION = str(config.version)  # 実験番号
     create_logger(VERSION)
     get_logger(VERSION).info(config)
     
-    
+
+
     # ### 0-2. Prepare files
     
     DIR_DOC_1 = Path('ebm_nlp_1_00/documents')
@@ -218,114 +354,6 @@ def main(config):
     
     
     # ### 3-2. Dataset
-    
-    class EBMNLPDataset(torch.utils.data.Dataset):
-        def __init__(self, text_files, token_files, p_files, i_files, o_files, max_length, pad_token):
-            """
-            text_files: list(str)
-            token_files: list(str)
-            p_files: list(str)
-            i_files: list(str)
-            o_files: list(str)
-            """
-            self.text_files = text_files
-            self.token_files = token_files
-            self.pmids = [re.compile(r'/([0-9]+)[^0-9]+').findall(path)[0] for path in self.text_files]
-            self.p_files = p_files
-            self.i_files = i_files
-            self.o_files = o_files
-            assert len(text_files) == len(token_files) == len(p_files) == len(i_files) == len(o_files), 'All arguments must be lists of the same size'
-            self.n = len(text_files)
-    
-            self.itol = {
-                # 'BOS' and 'EOS' are not needed to be explicitly included
-                0:'O', 1:'I-P', 2:'B-P', 3:'I-I', 4:'B-I', 5:'I-O', 6:'B-O'
-            }
-            self.ltoi = {
-                self.itol[i]:i for i in range(len(self.itol))
-            }
-            
-            self.max_length = max_length
-            self.pad_token = pad_token
-    
-        def __len__(self):
-            return self.n
-            
-        
-        def __getitem__(self, idx):
-            returns = {}
-            
-            returns['pmid'] = self.pmids[idx] 
-
-            with open(self.text_files[idx]) as f:
-                # Raw document. Example:
-                # [Triple therapy regimens involving H2 blockaders for therapy of Helicobacter pylori infections].
-                # Comparison of ranitidine and lansoprazole in short-term low-dose triple therapy for Helicobacter pylori infection. 
-                returns['text'] = f.read()
-        
-            with open(self.token_files[idx]) as f:
-                # Tokenized document. Example:
-                # ['[', 'Triple', 'therapy', 'regimens', 'involving', 'H2', 'blockaders',
-                #  'for', 'therapy', 'of', 'Helicobacter', 'pylori', 'infections', ']', '.',
-                #  'Comparison', 'of', 'ranitidine', 'and', 'lansoprazole', 'in',
-                #  'short-term', 'low-dose', 'triple', 'therapy', 'for',
-                #  'Helicobacter', 'pylori', 'infection', '.', ...
-                tokens = f.read().split()
-                tokens_padded = tokens + [self.pad_token] * (self.max_length - len(tokens))
-                returns['tokens'] = tokens_padded
-        
-            with open(self.p_files[idx]) as f:
-                # sequence of 0 (O-tag) or 1 (I-tag)
-                # e.g., '1,1,0,1,1,0,...'
-                p = f.read()
-                
-            with open(self.i_files[idx]) as f:
-                # sequence of 0 (O-tag) or 1 (I-tag)
-                # e.g., '1,1,0,1,1,0,...'
-                i = f.read()  
-    
-            with open(self.o_files[idx]) as f:
-                # sequence of 0 (O-tag) or 1 (I-tag)
-                # e.g., '1,1,0,1,1,0,...'
-                o = f.read()  
-    
-    
-            # sequence of 0 (O-tag) or 2 (B-P-tag) or 1 (I-P-tag)
-            # e.g., '2,1,0,2,1,0,...'
-            p = re.sub('1', f"{self.ltoi['I-P']}", p)
-            p = re.sub(f"^{self.ltoi['I-P']}", f"{self.ltoi['B-P']}", p)
-            p = re.sub(f"{self.ltoi['O']},{self.ltoi['I-P']}", f"{self.ltoi['O']},{self.ltoi['B-P']}", p)
-            
-            # sequence of 0 (O-tag) or 4 (B-I-tag) or 3 (I-I-tag)
-            # e.g., '4,3,0,4,3,0,...'
-            i = re.sub('1', f"{self.ltoi['I-I']}", i)
-            i = re.sub(f"^{self.ltoi['I-I']}", f"{self.ltoi['B-I']}", i)
-            i = re.sub(f"{self.ltoi['O']},{self.ltoi['I-I']}", f"{self.ltoi['O']},{self.ltoi['B-I']}", i)
-    
-            # sequence of 0 (O-tag) or 6 (B-O-tag) or 5 (I-O-tag)
-            # e.g., '6,5,0,6,5,0,...'
-            o = re.sub('1', f"{self.ltoi['I-O']}", o)
-            o = re.sub(f"^{self.ltoi['I-O']}", f"{self.ltoi['B-O']}", o)
-            o = re.sub(f"{self.ltoi['O']},{self.ltoi['I-O']}", f"{self.ltoi['O']},{self.ltoi['B-O']}", o)
-            
-    
-            # integrated P, I and O tags        
-            lp = [int(x) for x in p.split(',')]
-            li = [int(x) for x in i.split(',')]
-            lo = [int(x) for x in o.split(',')]
-            tag = torch.tensor(np.max(np.vstack([lp,li,lo]), axis=0))
-    
-            seq_len = tag.shape[0]
-            padding = torch.tensor([int(self.ltoi['O'])] * (self.max_length - seq_len))
-            tag_padded = torch.cat([tag, padding])
-            returns['tag'] = tag_padded
-    
-            mask = torch.cat([torch.ones_like(tag), torch.zeros_like(padding)]).to(bool)
-            returns['mask'] = mask
-    
-            return returns
-    
-    
     ds = EBMNLPDataset(
         text_file_train, token_file_train, p_file_train, i_file_train, o_file_train,
         max_length=MAX_LENGTH,
@@ -357,28 +385,12 @@ def main(config):
             self.itol = itol
             self.loss = []
             self.config = config
-    
-    
+   
+ 
         def get_device(self):
             return self.crf.state_dict()['transitions'].device
        
 
-        def get_version(self):
-            save_dir_root = Path(self.logger.experiment.save_dir) / self.logger.experiment.name
-            n_last_version = -1
-            while True:
-                if os.path.exists(save_dir_root / f'version_{n_last_version+1}'):
-                    n_last_version += 1
-                else:
-                    break
-            return n_last_version
-
-      
-        def get_media_dir(self):
-            save_dir_root = Path(self.logger.experiment.save_dir) / self.logger.experiment.name
-            save_dir = Path(save_dir_root / f'version_{self.get_version()}' / 'media')
-            return save_dir 
-       
        
         def id_to_tag(self, T_padded, Y_packed):
             """
@@ -400,11 +412,28 @@ def main(config):
             return T, Y
         
     
-        def forward(self, character_ids, tags, masks):
+        def forward(self, tokens, tags, masks):
             """
-            inputs: dict ({'tokens':list(list(str)), 'tag':torch.Tensor, 'mask':torch.BoolTensor)
+            inputs:
+                tokens: list(list(str))
+                tags: torch.Tensor in size (n_batch, max_len)
+                masks: torch.Booltensor in size (n_batch, max_len)
+                    Masks indicating the original sequences with True and padded sections with False.
+            outputs:
+                log_prob: torch.Tensor in size (1)
+                    Log probability of the gold standard NER tagging calculated with sum-product algorithm.
+                Y: torch.Tensor in size(n_batch, max_len)
+                    The most probable NER tagging sequence predicted with Viterbi algorithm.
             """
+            # tokens: list(list(str))
+            tokens_tp = np.array(tokens).T
+            n_batch = tokens_tp.shape[0]
+            tokens_tp = tokens_tp.tolist()
             
+            # character_ids: torch.tensor(n_batch, max_len)
+            character_ids = batch_to_ids(tokens_tp)
+            character_ids = character_ids.to(self.get_device())
+
             # characted_ids -> BioELMo hidden state of the last layer
             # Turn on gradient tracking
             out = self.bioelmo(character_ids)['elmo_representations'][-1]
@@ -430,21 +459,12 @@ def main(config):
             # Caution: key for loss function must exactly be 'loss'.
             """
             
-            # tokens: list(list(str))
-            tokens = np.array(batch['tokens']).T
-            n_batch = tokens.shape[0]
-            tokens = tokens.tolist()
-            
-            # character_ids: torch.tensor(n_batch, max_len)
-            cids = batch_to_ids(tokens)
-    
-            # character_ids, tags & masks
-            cids = cids.to(self.get_device())
+            tokens = batch['tokens']
             tags = batch['tag'].to(self.get_device())
             masks = batch['mask'].to(self.get_device())
                 
             # Negative Log Likelihood
-            log_prob, Y = self.forward(cids, tags, masks)
+            log_prob, Y = self.forward(tokens, tags, masks)
             returns = {'loss':log_prob * (-1.0), 'T':tags, 'Y':Y, 'I':batch['pmid']}
             return returns
         
@@ -481,9 +501,10 @@ def main(config):
                 Y += Y_batch
                 I += output['I'].cpu().numpy().tolist()
     
-            get_logger(VERSION).info(f'Training Epoch {self.current_epoch} ==========')
-            get_logger(VERSION).info(loss)
-            get_logger(VERSION).info(classification_report(T, Y, 4))
+            get_logger(VERSION).info(f'========== Training Epoch {self.current_epoch} ==========')
+            get_logger(VERSION).info(f'Loss: {loss.item()}')
+            get_logger(VERSION).info(f'Entity-wise classification report\n{seq_classification_report(T, Y, 4)}')
+            get_logger(VERSION).info(f'Token-wise classification report\n{span_classification_report(T, Y, 4)}')
     
             self.loss.append(loss)
             progress_bar = {'train_loss':loss}
@@ -497,24 +518,15 @@ def main(config):
             """
             (batch) -> (dict or OrderedDict)
             """   
-            
-            # tokens: list(list(str))
-            tokens = np.array(batch['tokens']).T
-            n_batch = tokens.shape[0]
-            tokens = tokens.tolist()
-            
-            # character_ids: torch.tensor(n_batch, max_len)
-            cids = batch_to_ids(tokens)
-    
-            # character_ids, tags & masks
-            cids = cids.to(self.get_device())
+            tokens = batch['tokens']
             tags = batch['tag'].to(self.get_device())
             masks = batch['mask'].to(self.get_device())
-                
+
             # Negative Log Likelihood
-            log_prob, Y = self.forward(cids, tags, masks)
-            returns = {'loss':log_prob * (-1.0), 'T':tags, 'Y':Y}
+            log_prob, Y = self.forward(tokens, tags, masks)
+            returns = {'loss':log_prob * (-1.0), 'T':tags, 'Y':Y, 'I':batch['pmid']}
             return returns
+
         
         
         def validation_end(self, outputs):
@@ -540,9 +552,10 @@ def main(config):
                 Y += Y_batch
                 I += output['I'].cpu().numpy().tolist()
                 
-            get_logger(VERSION).info(f'Validation Epoch {self.current_epoch} ==========')
-            get_logger(VERSION).info(loss)
-            get_logger(VERSION).info(classification_report(T, Y, 4))
+            get_logger(VERSION).info(f'========== Validation Epoch {self.current_epoch} ==========')
+            get_logger(VERSION).info(f'Loss: {loss.item()}')
+            get_logger(VERSION).info(f'Entity-wise classification report\n{seq_classification_report(T, Y, 4)}')
+            get_logger(VERSION).info(f'Token-wise classification report\n{span_classification_report(T, Y, 4)}')
     
             self.loss.append(loss)
             progress_bar = {'val_loss':loss}
@@ -561,6 +574,7 @@ def main(config):
                 return optimizer
 
 
+
         def train_dataloader(self):
             return dl_train
         
@@ -573,7 +587,7 @@ def main(config):
     ebmnlp.to(device)
     trainer = pl.Trainer(
         max_epochs=int(config.max_epochs),
-        train_percent_check=1,
+        train_percent_check=1
     )
     trainer.fit(ebmnlp)
 
