@@ -4,7 +4,7 @@
 $ pip install -r requirements.txt
 ```
 
-2. Download trained model (checkpoint) from Google Drive. [This is the link.](https://drive.google.com/drive/folders/1cID_mPxRnq6nQ6ZmbL0S3wyGslD--JsT?usp=sharing)  
+2. Download trained model (checkpoint) from Google Drive ([https://drive.google.com/drive/folders/1cID_mPxRnq6nQ6ZmbL0S3wyGslD--JsT?usp=sharing](https://drive.google.com/drive/folders/1cID_mPxRnq6nQ6ZmbL0S3wyGslD--JsT?usp=sharing)).  
 Instead, you can also download it by running this:
 ```sh
 ```
