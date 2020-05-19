@@ -1,6 +1,15 @@
-# Preparation
+# 1. Preparation
+1. Install necessary packages:
+```sh
+$ pip install -r requirements.txt
+```
 
-# Use via command line
+2. Download trained model (checkpoint) from Google Drive. [This is the link.](https://drive.google.com/drive/folders/1cID_mPxRnq6nQ6ZmbL0S3wyGslD--JsT?usp=sharing)  
+Instead, you can also download it by running this:
+```sh
+```
+
+# 2. Use via command line
 1. Prepare text file that contains an RCT abstract (e.g., sample.txt).
 
 2. Run like this:
@@ -32,7 +41,7 @@ O	multicentre
 $ python ebmnlp.py TEXT_FILE_NAME OUTPUT_FILE_NAME
 ```
 
-# Use via Web browser
+# 3. Use via Web browser
 1. Run this:
 ```
 $ bash run_flask. sh
