@@ -1,10 +1,10 @@
 # 1. Preparation
-1. Clone this repository
+1. Clone this repository:
 ```sh
 $ git clone https://github.com/iBotamon/ebmnlp.git
 ```
 
-2. Vertirual Enviroment
+2. Vertirual Enviroment:
 ```sh
 $ cd ebmnlp
 $ python -m venv .
@@ -18,10 +18,14 @@ $ pip install --upgrade pip
 $ pip install -r requirements.txt
 ```
 
-4. Download trained model (checkpoint) from Google Drive ([https://drive.google.com/drive/folders/1cID_mPxRnq6nQ6ZmbL0S3wyGslD--JsT?usp=sharing](https://drive.google.com/drive/folders/1cID_mPxRnq6nQ6ZmbL0S3wyGslD--JsT?usp=sharing)).  
-Instead, you can also download it by running this:
+4. Download the following files:
+- Save [Model checkpoint](https://drive.google.com/drive/folders/1cID_mPxRnq6nQ6ZmbL0S3wyGslD--JsT?usp=sharing) in `models/ebmnlp_bioelmo_crf`.
+- Save [BioELMo weights]() in `models/bioelmo`.
+- Save [BioELMo options]() in `models/bioelmo`.
+
+Instead, you can also download them by running this:
 ```sh
-$ bash download_model.sh
+$ bash download_models.sh
 ```
 
 # 2. Use via command line
@@ -59,7 +63,7 @@ $ python ebmnlp.py TEXT_FILE_NAME OUTPUT_FILE_NAME
 # 3. Use via Web browser
 1. Run this:
 ```
-$ bash run_flask. sh
+$ bash run_flask.sh
 ```
 
 2. Access to `localhost:5000` via your Web browser.
