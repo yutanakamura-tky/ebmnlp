@@ -4,11 +4,13 @@ from ebmnlp_bioelmo_crf import EBMNLPTagger
 
 nltk.download('punkt')
 
+EBMNLP_BIOELMO_CRF_CHECKPOINT_PATH='models/ebmnlp_bioelmo_crf/ebmnlp_bioelmo_crf.ckpt'
+
 def main(config):
     with open(config.input_file) as f:
         abstract = ''.join(f.readlines())
 
-    ebmnlp = EBMNLPTagger.load_from_checkpoint('./checkpoint/ebmnlp_bioelmo_crf.ckpt')
+    ebmnlp = EBMNLPTagger.load_from_checkpoint(EBMNLP_BIOELMO_CRF_CHECKPOINT_PATH)
 
     if not bool(config.no_cuda):
         ebmnlp.to('cuda')
