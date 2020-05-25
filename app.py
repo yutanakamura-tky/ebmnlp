@@ -1,5 +1,5 @@
 import nltk
-from .ebmnlp_bioelmo_crf import EBMNLPTagger
+from ebmnlp_bioelmo_crf import EBMNLPTagger
 from flask import Flask, request, render_template
 
 app = Flask(__name__)
