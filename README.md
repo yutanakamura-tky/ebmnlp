@@ -1,12 +1,27 @@
 # 1. Preparation
-1. Install necessary packages:
+1. Clone this repository
 ```sh
+$ git clone https://github.com/iBotamon/ebmnlp.git
+```
+
+2. Vertirual Enviroment
+```sh
+$ cd ebmnlp
+$ python -m venv .
+$ source bin/activate
+```
+
+3. Install necessary packages:
+
+```sh
+$ pip install --upgrade pip
 $ pip install -r requirements.txt
 ```
 
-2. Download trained model (checkpoint) from Google Drive ([https://drive.google.com/drive/folders/1cID_mPxRnq6nQ6ZmbL0S3wyGslD--JsT?usp=sharing](https://drive.google.com/drive/folders/1cID_mPxRnq6nQ6ZmbL0S3wyGslD--JsT?usp=sharing)).  
+4. Download trained model (checkpoint) from Google Drive ([https://drive.google.com/drive/folders/1cID_mPxRnq6nQ6ZmbL0S3wyGslD--JsT?usp=sharing](https://drive.google.com/drive/folders/1cID_mPxRnq6nQ6ZmbL0S3wyGslD--JsT?usp=sharing)).  
 Instead, you can also download it by running this:
 ```sh
+$ bash download_model.sh
 ```
 
 # 2. Use via command line
