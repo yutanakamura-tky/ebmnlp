@@ -3,8 +3,8 @@
 # Download pretrained BioELMo
 
 bioelmo_dir=models/bioelmo
-bioelmo_options_path=${bioelmo_dir}/options.json
-bioelmo_model_path=${bioelmo_dir}/bioelmo.hdf5
+bioelmo_options_path=${bioelmo_dir}/biomed_elmo_options.json
+bioelmo_model_path=${bioelmo_dir}/bioelmo_elmo_weights.hdf5
 
 file_id=19sLZ1NhUtD_bMgTstSRWoVDx6Vm-T8Qt
 curl -sc /tmp/cookie "https://drive.google.com/uc?export=download&id=${file_id}" > /dev/null

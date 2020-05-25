@@ -265,7 +265,7 @@ class EBMNLPTagger(pl.LightningModule):
 
         # Load Pretrained BioELMo
         DIR_ELMo = Path(str(self.hparams.bioelmo_dir))
-        self.bioelmo = Elmo(DIR_ELMo / 'options.json', DIR_ELMo / 'bioelmo', 1, requires_grad=bool(self.hparams.fine_tune_bioelmo), dropout=0)
+        self.bioelmo = Elmo(DIR_ELMo / 'biomed_elmo_options.json', DIR_ELMo / 'biomed_elmo_weights.hdf5', 1, requires_grad=bool(self.hparams.fine_tune_bioelmo), dropout=0)
 
         # ELMo Padding token (In ELMo token with ID 0 is used for padding)
         VOCAB_FILE_PATH = DIR_ELMo / 'vocab.txt'
@@ -669,7 +669,7 @@ if __name__=='__main__':
         parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
         parser.add_argument('--debug', '--debug-mode', action='store_true', dest='debug_mode', help='Set this option for debug mode')
         parser.add_argument('-d', '--dir', '--data-dir', dest='data_dir', type=str, default='./official/ebm_nlp_1_00', help='Data Directory')
-        parser.add_argument('--bioelmo-dir', dest='bioelmo_dir', type=str, default='~/bioelmo', help='BioELMo Directory')
+        parser.add_argument('--bioelmo-dir', dest='bioelmo_dir', type=str, default='./models/bioelmo', help='BioELMo Directory')
         parser.add_argument('-v', '--version', dest='version', type=str, help='Experiment Name')
         parser.add_argument('-e', '--max-epochs', dest='max_epochs', type=int, default='15', help='Max Epochs (Default: 15)')
         parser.add_argument('--max-length', dest='max_length', type=int, default='1024', help='Max Length (Default: 1024)')
