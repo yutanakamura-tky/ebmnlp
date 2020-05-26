@@ -652,7 +652,11 @@ def main(config):
 
 
     # ### 4-2. Training
-    device = torch.device(f'cuda:{config.cuda}')
+    if config.cuda is None:
+        device = torch.device('cuda')
+    else:
+        device = torch.device(f'cuda:{config.cuda}')
+
     ebmnlp.to(device)
 
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
@@ -683,7 +687,7 @@ if __name__=='__main__':
         parser.add_argument('--fine-tune-bioelmo', action='store_true', dest='fine_tune_bioelmo', help='Whether to Fine Tune BioELMo')
         parser.add_argument('--lr-bioelmo', dest='lr_bioelmo', type=float, default='1e-4', help='Learning Rate in BioELMo Fine-tuning')
         parser.add_argument('-b', '--batch-size', dest='batch_size', type=int, default='16', help='Batch size (Default: 16)')
-        parser.add_argument('-c', '--cuda', dest='cuda', help='CUDA Device Number')
+        parser.add_argument('-c', '--cuda', dest='cuda', default=None, help='CUDA Device Number')
         parser.add_argument('-r', '--random-state', dest='random_state', type=int, default='42', help='Random state (Default: 42)')
         namespace = parser.parse_args()
         return namespace
