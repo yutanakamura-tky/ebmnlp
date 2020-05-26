@@ -654,9 +654,15 @@ def main(config):
     # ### 4-2. Training
     device = torch.device(f'cuda:{config.cuda}')
     ebmnlp.to(device)
+
+    checkpoint_callback = pl.callbacks.ModelCheckpoint(
+        filepath='./models/ebmnlp_bioelmo_crf/ebmnlp_bioelmo_crf.ckpt'
+    )
+
     trainer = pl.Trainer(
         max_epochs=int(config.max_epochs),
-        fast_dev_run=bool(config.debug_mode)
+        fast_dev_run=bool(config.debug_mode),
+        checkpoint_callback=checkpoint_callback
     )
     trainer.fit(ebmnlp)
 
