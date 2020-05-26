@@ -11,7 +11,7 @@ def form():
 @app.route('/predict', methods=['POST'])
 def predict():
     abstract = request.form['abstract']
-    ebmnlp = EBMNLPTagger.load_from_checkpoint('./lightning_logs/version_146/checkpoints/epoch=13.ckpt')
+    ebmnlp = EBMNLPTagger.load_from_checkpoint('./checkpoint/checkpoints/epoch=13.ckpt')
     ebmnlp.to('cuda')
     tokens = nltk.word_tokenize(abstract)
     tags = ebmnlp.unpack_pred_tags(ebmnlp.forward([tokens]))
