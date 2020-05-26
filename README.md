@@ -76,6 +76,10 @@ $ bash run_flask.sh
 
 2. Access to `localhost:5000` via your Web browser.
 
+3. You can use the PIO identification system interactively.
+
+![Flask demo image](ebmnlp_flask_demo.png)
+
 
 # 3. How to train BioELMo + CRF model yourself
 1. Prepare EBM-NLP dataset `ebm_nlp_1_00.tar.gz` from [the repository by the authors](https://github.com/bepnye/EBM-NLP).
