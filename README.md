@@ -20,15 +20,17 @@ $ pip install -r requirements.txt
 
 4. Download the following files:
 - Save [Model checkpoint](https://drive.google.com/drive/folders/1cID_mPxRnq6nQ6ZmbL0S3wyGslD--JsT?usp=sharing) in `models/ebmnlp_bioelmo_crf`.
-- Save [BioELMo weights]() in `models/bioelmo`.
-- Save [BioELMo options]() in `models/bioelmo`.
+- Save [BioELMo weights](https://drive.google.com/file/d/1CHRd5YQrt3ys64WfJkJR1KX72-2CaT4I/view) in `models/bioelmo`.
+- Save [BioELMo options](https://drive.google.com/file/d/19sLZ1NhUtD_bMgTstSRWoVDx6Vm-T8Qt/view) in `models/bioelmo`.
+- Save [BioELMo vocabulary](https://drive.google.com/file/d/15cXEVoRhUQ9oBnHVFP3nx6GQozczgxgP/view) in `models/bioelmo`.
 
 Instead, you can also download them by running this:
 ```sh
 $ bash download_models.sh
 ```
 
-# 2. Use via command line
+# 2. How to use BioELMo + CRF model
+### 2-1. Use via command line
 1. Prepare text file that contains an RCT abstract (e.g., sample.txt).
 
 2. Run like this:
@@ -60,7 +62,7 @@ O	multicentre
 $ python ebmnlp.py TEXT_FILE_NAME OUTPUT_FILE_NAME
 ```
 
-# 3. Use via Web browser
+### 2-2. Use via Web browser
 1. Run this:
 ```
 $ bash run_flask.sh
