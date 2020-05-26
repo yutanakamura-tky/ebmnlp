@@ -10,7 +10,7 @@ The method is Named Entity Recognition (NER) with BioELMo + CRF under PyTorch im
 $ git clone https://github.com/iBotamon/ebmnlp.git
 ```
 
-2. Vertirual Enviroment:
+2. Activate Virtual Enviroment:
 ```sh
 $ cd ebmnlp
 $ python -m venv .
@@ -75,6 +75,10 @@ $ bash run_flask.sh
 ```
 
 2. Access to `localhost:5000` via your Web browser.
+
+3. You can use the PIO identification system interactively.
+
+![Flask demo image](ebmnlp_flask_demo.png)
 
 
 # 3. How to train BioELMo + CRF model yourself
