@@ -1,3 +1,9 @@
+# 0. What is this?
+
+This is a solution to the EBM-NLP task proposed in [this ACL 2018 publication](https://arxiv.org/abs/1806.04185) by Benjamin Nye et al.
+
+The method is Named Entity Recognition (NER) with BioELMo + CRF under PyTorch implementation.
+
 # 1. Preparation
 1. Clone this repository:
 ```sh
@@ -69,3 +75,19 @@ $ bash run_flask.sh
 ```
 
 2. Access to `localhost:5000` via your Web browser.
+
+
+# 3. How to train BioELMo + CRF model yourself
+1. Prepare EBM-NLP dataset `ebm_nlp_1_00.tar.gz` from [the repository by the authors](https://github.com/bepnye/EBM-NLP).
+
+2. Extract `ebm_nlp_1_00.tar.gz` in the `official` directory.
+
+3. Run this:
+```sh
+$ python ebmnlp_bioelmo_crf.py
+```
+
+You can specify CUDA device number like this:
+```sh
+$ python ebmnlp_bioelmo_crf.py --cuda 3
+```
