@@ -1,8 +1,10 @@
 import nltk
-from .ebmnlp_bioelmo_crf import EBMNLPTagger
+from ebmnlp_bioelmo_crf import EBMNLPTagger
 from flask import Flask, request, render_template
 
 app = Flask(__name__)
+
+EBMNLP_BIOELMO_CRF_CHECKPOINT_PATH = './models/ebmnlp_bioelmo_crf/ebmnlp_bioelmo_crf.ckpt'
 
 @app.route('/')
 def form():
@@ -11,7 +13,7 @@ def form():
 @app.route('/predict', methods=['POST'])
 def predict():
     abstract = request.form['abstract']
-    ebmnlp = EBMNLPTagger.load_from_checkpoint('./checkpoint/checkpoints/epoch=13.ckpt')
+    ebmnlp = EBMNLPTagger.load_from_checkpoint(EBMNLP_BIOELMO_CRF_CHECKPOINT_PATH)
     ebmnlp.to('cuda')
     tokens = nltk.word_tokenize(abstract)
     tags = ebmnlp.unpack_pred_tags(ebmnlp.forward([tokens]))

@@ -1,42 +1,44 @@
 import argparse
 import nltk
 from ebmnlp_bioelmo_crf import EBMNLPTagger
+
 nltk.download('punkt')
 
-def predict(config):
-    """
-    NameSpace -> list(tuple)
-    """
-    ebmnlp = EBMNLPTagger.load_from_checkpoint('./lightning_logs/version_146/checkpoints/epoch=13.ckpt')
+EBMNLP_BIOELMO_CRF_CHECKPOINT_PATH='models/ebmnlp_bioelmo_crf/ebmnlp_bioelmo_crf.ckpt'
 
-    if not config.no_cuda:
+def main(config):
+    with open(config.input_file) as f:
+        abstract = ''.join(f.readlines())
+
+    ebmnlp = EBMNLPTagger.load_from_checkpoint(EBMNLP_BIOELMO_CRF_CHECKPOINT_PATH)
+
+    if not bool(config.no_cuda):
         ebmnlp.to('cuda')
 
-    with open(config.filename) as f:
-        tokens = nltk.word_tokenize(''.join(f.readlines()))
-
+    tokens = nltk.word_tokenize(abstract)
     tags = ebmnlp.unpack_pred_tags(ebmnlp.forward([tokens]))
     tagging = [(tag, token) for tag, token in zip(tags[0], tokens)]
+    result_str = '\n'.join([f'{tg[0]}\t{tg[1]}' for tg in tagging])
 
-    if config.out_filename:
-        with open(config.out_filename, mode='w') as f:
-            f.write('\n'.join([f'{tag}\t{token}' for tag, token in zip(tags[0], tokens)]))
-        print(f'Tagging done! -> {config.out_filename}')
+    config.output_file = config.output_file or None
+
+    if config.output_file is None:
+        print(result_str)
 
     else:
-        print('\n'.join([f'{tg[0]}\t{tg[1]}' for tg in tagging]))
+        with open(config.output_file, 'w') as f:
+            f.write(result_str)
+        print(f'Tagging done! -> {config.out_filename}')
 
-    return tagging
 
 if __name__=='__main__':
-
     def get_args():
-        parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
-        parser.add_argument(dest='filename', help='path of txt file to read')
-        parser.add_argument(dest='out_filename', nargs='?', help='path of txt file to read')
-        parser.add_argument('--no-cuda', action='store_true', dest='no_cuda', help='set to use without CUDA')
-        args = parser.parse_args()
-        return args
+        parser = argparse.ArgumentParser()
+        parser.add_argument('input_file', type=str)
+        parser.add_argument('output_file', type=str, nargs='?') 
+        parser.add_argument('--no-cuda', dest='no_cuda', action='store_true') 
 
-    config = get_args()
-    predict(config)
+    config = parser.parse_args()
+    return config
+
+    main(config)
