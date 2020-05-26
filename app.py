@@ -13,8 +13,12 @@ def form():
 @app.route('/predict', methods=['POST'])
 def predict():
     abstract = request.form['abstract']
+    use_cuda = request.form['use_cuda']
     ebmnlp = EBMNLPTagger.load_from_checkpoint(EBMNLP_BIOELMO_CRF_CHECKPOINT_PATH)
-    ebmnlp.to('cuda')
+
+    if bool(use_cuda):
+        ebmnlp.to('cuda')
+
     tokens = nltk.word_tokenize(abstract)
     tags = ebmnlp.unpack_pred_tags(ebmnlp.forward([tokens]))
     tagging = [(tag, token) for tag, token in zip(tags[0], tokens)]
