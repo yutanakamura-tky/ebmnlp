@@ -37,6 +37,26 @@ import pytorch_lightning as pl
 from logging import getLogger, Formatter, FileHandler, StreamHandler, INFO, DEBUG
 
 
+# ### 0-1. Hyperparameters
+def get_args():
+    parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
+    parser.add_argument('--debug', '--debug-mode', action='store_true', dest='debug_mode', help='Set this option for debug mode')
+    parser.add_argument('-d', '--dir', '--data-dir', dest='data_dir', type=str, default='./official/ebm_nlp_1_00', help='Data Directory')
+    parser.add_argument('--bioelmo-dir', dest='bioelmo_dir', type=str, default='./models/bioelmo', help='BioELMo Directory')
+    parser.add_argument('-v', '--version', dest='version', type=str, help='Experiment Name')
+    parser.add_argument('-e', '--max-epochs', dest='max_epochs', type=int, default='15', help='Max Epochs (Default: 15)')
+    parser.add_argument('--max-length', dest='max_length', type=int, default='1024', help='Max Length (Default: 1024)')
+    parser.add_argument('-l', '--lr', dest='lr', type=float, default='1e-2', help='Learning Rate (Default: 1e-2)')
+    parser.add_argument('--fine-tune-bioelmo', action='store_true', dest='fine_tune_bioelmo', help='Whether to Fine Tune BioELMo')
+    parser.add_argument('--lr-bioelmo', dest='lr_bioelmo', type=float, default='1e-4', help='Learning Rate in BioELMo Fine-tuning')
+    parser.add_argument('-b', '--batch-size', dest='batch_size', type=int, default='16', help='Batch size (Default: 16)')
+    parser.add_argument('-c', '--cuda', dest='cuda', default=None, help='CUDA Device Number')
+    parser.add_argument('-r', '--random-state', dest='random_state', type=int, default='42', help='Random state (Default: 42)')
+    namespace = parser.parse_args()
+    return namespace
+
+
+
 # ### 0-2. Prepare for logging
 
 def create_logger(exp_version):
@@ -762,7 +782,11 @@ def span_classification_report(T, Y, digits=4):
 
 
 # 4. MAIN
-def main(config):
+def main():
+    config = get_args()
+    print(config)
+
+
     # ### 4-0. Print config
     create_logger(config.version)
     get_logger(config.version).info(config)
@@ -797,23 +821,4 @@ def main(config):
 
 
 if __name__=='__main__':
-    def get_args():
-        parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
-        parser.add_argument('--debug', '--debug-mode', action='store_true', dest='debug_mode', help='Set this option for debug mode')
-        parser.add_argument('-d', '--dir', '--data-dir', dest='data_dir', type=str, default='./official/ebm_nlp_1_00', help='Data Directory')
-        parser.add_argument('--bioelmo-dir', dest='bioelmo_dir', type=str, default='./models/bioelmo', help='BioELMo Directory')
-        parser.add_argument('-v', '--version', dest='version', type=str, help='Experiment Name')
-        parser.add_argument('-e', '--max-epochs', dest='max_epochs', type=int, default='15', help='Max Epochs (Default: 15)')
-        parser.add_argument('--max-length', dest='max_length', type=int, default='1024', help='Max Length (Default: 1024)')
-        parser.add_argument('-l', '--lr', dest='lr', type=float, default='1e-2', help='Learning Rate (Default: 1e-2)')
-        parser.add_argument('--fine-tune-bioelmo', action='store_true', dest='fine_tune_bioelmo', help='Whether to Fine Tune BioELMo')
-        parser.add_argument('--lr-bioelmo', dest='lr_bioelmo', type=float, default='1e-4', help='Learning Rate in BioELMo Fine-tuning')
-        parser.add_argument('-b', '--batch-size', dest='batch_size', type=int, default='16', help='Batch size (Default: 16)')
-        parser.add_argument('-c', '--cuda', dest='cuda', default=None, help='CUDA Device Number')
-        parser.add_argument('-r', '--random-state', dest='random_state', type=int, default='42', help='Random state (Default: 42)')
-        namespace = parser.parse_args()
-        return namespace
-
-    config = get_args()
-    print(config)
-    main(config)
+    main()

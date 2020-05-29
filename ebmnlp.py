@@ -6,7 +6,20 @@ nltk.download('punkt')
 
 EBMNLP_BIOELMO_CRF_CHECKPOINT_PATH='models/ebmnlp_bioelmo_crf/ebmnlp_bioelmo_crf.ckpt'
 
-def main(config):
+
+def get_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('input_file', type=str)
+    parser.add_argument('output_file', type=str, nargs='?') 
+    parser.add_argument('--no-cuda', dest='no_cuda', action='store_true') 
+
+    args = parser.parse_args()
+    return args
+
+
+def main():
+    config = get_args()
+
     with open(config.input_file) as f:
         abstract = ''.join(f.readlines())
 
@@ -32,13 +45,4 @@ def main(config):
 
 
 if __name__=='__main__':
-    def get_args():
-        parser = argparse.ArgumentParser()
-        parser.add_argument('input_file', type=str)
-        parser.add_argument('output_file', type=str, nargs='?') 
-        parser.add_argument('--no-cuda', dest='no_cuda', action='store_true') 
-
-    config = parser.parse_args()
-    return config
-
-    main(config)
+    main()
