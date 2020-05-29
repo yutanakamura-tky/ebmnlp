@@ -95,8 +95,8 @@ else
     mkdir ${biobert_dir}
 fi
 
-biobert_v1_0_path=${biobert_dir}/biobert_v1.0_pubmed_pmc
-biobert_v1_1_path=${biobert_dir}/biobert_v1.1_pubmed
+biobert_v1_0_dir=${biobert_dir}/biobert_v1.0_pubmed_pmc
+biobert_v1_1_dir=${biobert_dir}/biobert_v1.1_pubmed
 
 biobert_v1_0_arc_path="$biobert_v1_0_path".tar.gz
 biobert_v1_1_arc_path="$biobert_v1_1_path".tar.gz
@@ -104,15 +104,16 @@ biobert_v1_1_arc_path="$biobert_v1_1_path".tar.gz
 dl_v1_0=true
 dl_v1_1=true
 
-paths=($biobert_v1_0_arc_path $biobert_v1_1_arc_path)
+arcs=($biobert_v1_0_arc_path $biobert_v1_1_arc_path)
+dirs=($biobert_v1_0_dir $biobert_v1_1_dir)
 flags=($dl_v1_0 $dl_v1_1)
 
-for ix in ${!paths[@]}
+for ix in ${!arcs[@]}
 do
-    if [ -s ${paths[ix]} ]; then
+    if [ -s ${arcs[ix]} ] || [ -e ${dirs[ix]} ]; then
         while :
         do
-            read -n 1 -p "File ${paths[ix]} already exists. Download it again? (y/n): " tmp_flag
+            read -n 1 -p "File ${arcs[ix]} or directory ${dirs[ix]} already exists. Download it again? (y/n): " tmp_flag
             echo
             if  [ $tmp_flag = "y" ] || [ $tmp_flag = "n" ]; then
                 break
@@ -131,27 +132,35 @@ do
 done
 
 if "${flags[0]}"; then
+    echo "Downloading to ${arcs[0]} ..."
     file_id=1jGUu2dWB1RaeXmezeJmdiPKQp3ZCmNb7
     curl -sc /tmp/cookie "https://drive.google.com/uc?export=download&id=${file_id}" > /dev/null
     CODE="$(awk '/_warning_/ {print $NF}' /tmp/cookie)"
-    curl -Lb /tmp/cookie "https://drive.google.com/uc?export=download&confirm=${CODE}&id=${file_id}" -o ${paths[0]}
-    echo "Download complete: ${paths[0]}"
+    curl -Lb /tmp/cookie "https://drive.google.com/uc?export=download&confirm=${CODE}&id=${file_id}" -o ${arcs[0]}
+    echo "Download complete ${arcs[0]}"
+    echo "Extracting ${arcs[0]} ..."
+    tar -xvf ${arcs[0]} -C ${biobert_dir}
+    rm ${arcs[0]}
+    echo "Removed ${arcs[0]} ..."
 else
     :
 fi
 
 if "${flags[1]}"; then
+    echo "Downloading to ${arcs[1]} ..."
     file_id=1R84voFKHfWV9xjzeLzWBbmY1uOMYpnyD
     curl -sc /tmp/cookie "https://drive.google.com/uc?export=download&id=${file_id}" > /dev/null
     CODE="$(awk '/_warning_/ {print $NF}' /tmp/cookie)"
-    curl -Lb /tmp/cookie "https://drive.google.com/uc?export=download&confirm=${CODE}&id=${file_id}" -o ${paths[1]}
-    echo "Download complete: ${paths[1]}"
+    curl -Lb /tmp/cookie "https://drive.google.com/uc?export=download&confirm=${CODE}&id=${file_id}" -o ${arcs[1]}
+    echo "Download complete ${arcs[1]}"
+    echo "Extracting ${arcs[1]} ..."
+    tar -xvf ${arcs[1]} -C ${biobert_dir}
+    rm ${arcs[1]}
+    echo "Removed ${arcs[1]} ..."
 else
     :
 fi
 
-tar -xf ${paths[0]}
-tar -xf ${paths[1]}
 
 
 # Download BioELMo + CRF EBMNLP model checkpoint
