@@ -11,7 +11,7 @@ else
 fi
 
 bioelmo_options_path=${bioelmo_dir}/biomed_elmo_options.json
-bioelmo_model_path=${bioelmo_dir}/bioelmo_elmo_weights.hdf5
+bioelmo_model_path=${bioelmo_dir}/biomed_elmo_weights.hdf5
 bioelmo_vocab_path=${bioelmo_dir}/vocab.txt
 
 dl_options=true
