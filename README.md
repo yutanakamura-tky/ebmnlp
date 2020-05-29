@@ -84,7 +84,17 @@ $ bash run_flask.sh
 # 3. How to train BioELMo + CRF model yourself
 1. Prepare EBM-NLP dataset `ebm_nlp_1_00.tar.gz` from [the repository by the authors](https://github.com/bepnye/EBM-NLP).
 
-2. Extract `ebm_nlp_1_00.tar.gz` in the `official` directory.
+2. Extract `ebm_nlp_1_00.tar.gz` in the `official` directory like this:
+```
+- models
+- templates
+- official
+  └ ebm_nlp_1_00
+    └ annotations
+      └ ..
+    └ documents
+      └ ..
+```
 
 3. Run this:
 ```sh
