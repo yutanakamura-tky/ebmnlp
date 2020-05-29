@@ -3,6 +3,13 @@
 # Download pretrained BioELMo
 
 bioelmo_dir=models/bioelmo
+
+if [ -e ${bioelmo_dir}]; then
+    :
+else
+    mkdir ${bioelmo_dir}
+fi
+
 bioelmo_options_path=${bioelmo_dir}/biomed_elmo_options.json
 bioelmo_model_path=${bioelmo_dir}/bioelmo_elmo_weights.hdf5
 bioelmo_vocab_path=${bioelmo_dir}/vocab.txt
@@ -25,7 +32,15 @@ curl -Lb /tmp/cookie "https://drive.google.com/uc?export=download&confirm=${CODE
 
 # Download BioELMo + CRF EBMNLP model checkpoint
 
-ebmnlp_bioelmo_crf_checkpoint_path=models/ebmnlp_bioelmo_crf/ebmnlp_bioelmo_crf.ckpt
+bioelmo_crf_checkpoint_dir=models/ebmnlp_bioelmo_crf
+
+if [ -e ${bioelmo_crf_checkpoint_dir} ]; then
+    :
+else
+    mkdir ${bioelmo_crf_checkpoint_dir}
+fi
+
+bioelmo_crf_checkpoint_path=${bioelmo_crf_checkpoint_dir}/ebmnlp_bioelmo_crf.ckpt
 
 file_id=1p5OOA-4t7LnnTBiKfvr6VNR317oPbF4G
 curl -sc /tmp/cookie "https://drive.google.com/uc?export=download&id=${file_id}" > /dev/null
