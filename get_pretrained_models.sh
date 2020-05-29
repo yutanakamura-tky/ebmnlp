@@ -150,8 +150,8 @@ else
     :
 fi
 
-tar -xf ${paths[@]}
-
+tar -xf ${paths[0]}
+tar -xf ${paths[1]}
 
 
 # Download BioELMo + CRF EBMNLP model checkpoint

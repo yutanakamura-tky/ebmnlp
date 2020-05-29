@@ -1,5 +1,6 @@
 import argparse
 import nltk
+import torch
 from ebmnlp_bioelmo_crf import EBMNLPTagger
 
 nltk.download('punkt')
@@ -25,7 +26,7 @@ def main():
 
     ebmnlp = EBMNLPTagger.load_from_checkpoint(EBMNLP_BIOELMO_CRF_CHECKPOINT_PATH)
 
-    if not bool(config.no_cuda):
+    if torch.cuda.is_available() and (not bool(config.no_cuda)):
         ebmnlp.to('cuda')
 
     tokens = nltk.word_tokenize(abstract)
