@@ -9,7 +9,7 @@ EBMNLP_BIOELMO_CRF_CHECKPOINT_PATH = './models/ebmnlp_bioelmo_crf/ebmnlp_bioelmo
 
 @app.route('/')
 def form():
-    return render_template('sample.html', cuda_is_available=torch.cuda.is_available())
+    return render_template('sample.html', cuda_is_available=torch.cuda.is_available(), show_legend=False)
 
 @app.route('/predict', methods=['POST'])
 def predict():
@@ -25,4 +25,4 @@ def predict():
     tokens = nltk.word_tokenize(abstract)
     tags = ebmnlp.unpack_pred_tags(ebmnlp.forward([tokens]))
     tagging = [(tag, token) for tag, token in zip(tags[0], tokens)]
-    return render_template('sample.html', tagging=tagging, cuda_is_available=torch.cuda.is_available())
+    return render_template('sample.html', tagging=tagging, cuda_is_available=torch.cuda.is_available(), show_legend=True)

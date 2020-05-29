@@ -17,10 +17,8 @@
 
     <div class="container">
       <form class="form-horizontal" method="POST", action="/predict">
-        <div class="col-xs-12 col-sm-12 col-md-12 col-lg-12">
-          <textarea class="form-control" name="abstract" rows="10" placeholder="Input an RCT abstract"></textarea>
-        </div>
-        <div class="col-xs-2 col-sm-2 col-md-2 col-lg-2">
+        <textarea class="form-control" name="abstract" rows="10" placeholder="Input an RCT abstract"></textarea>
+        <div class="form-check">
           {% if cuda_is_available %}
             <input class="form-check-input" name="use_cuda" value="True" id="use_cuda" type="checkbox"/ checked="checked">
             <label class="form-check-label" for="use_cuda">Use GPU</label>
@@ -29,31 +27,33 @@
             <label class="form-check-label" for="use_cuda">Use GPU</label>
           {% endif %}
         </div>
-        <div class="col-xs-2 col-sm-2 col-md-2 col-lg-2">
+        <div class="">
           <input class="btn btn-primary" value="Submit" type="submit"/>
         </div>
       </form>
+    </div>
  
-      <div class="col-xs-12 col-sm-12 col-md-12 col-lg-12"> 
+    <div class="container">
+      {% if show_legend %}
         <p>
           <span style='color:#dc143c'>■</span> Patient
           <span style='color:#4169e1'>■</span> Intervention
           <span style='color:#ff8c00'>■</span> Outcome
         </p>
-        <p>
-          {% for tag in tagging %}
-            {% if tag[0] == 'O' %}
-              <span style='color:#999999'>{{ tag[1] }}</span>
-            {% elif tag[0] == 'I-P' %}
-              <span style='color:#dc143c'>{{ tag[1] }}</span>
-            {% elif tag[0] == 'I-I' %}
-              <span style='color:#4169e1'>{{ tag[1] }}</span>
-            {% elif tag[0] == 'I-O' %}
-              <span style='color:#ff8c00'>{{ tag[1] }}</span>
-            {% endif %}
-          {% endfor %}
-        </p>
-      </div>
+      {% endif %}
+      <p>
+        {% for tag in tagging %}
+          {% if tag[0] == 'O' %}
+            <span style='color:#999999'>{{ tag[1] }}</span>
+          {% elif tag[0] == 'I-P' %}
+            <span style='color:#dc143c'>{{ tag[1] }}</span>
+          {% elif tag[0] == 'I-I' %}
+            <span style='color:#4169e1'>{{ tag[1] }}</span>
+          {% elif tag[0] == 'I-O' %}
+            <span style='color:#ff8c00'>{{ tag[1] }}</span>
+          {% endif %}
+        {% endfor %}
+      </p>
     </div>
     <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js" integrity="sha384-DfXdz2htPH0lsSSs5nCTpuj/zy4C+OGpamoFVy38MVBnE+IbbVYUew+OrCXaRkfj" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.0/dist/umd/popper.min.js" integrity="sha384-Q6E9RHvbIyZFJoft+2mJbHaEWldlvI9IOYy5n3zV9zzTtmI3UksdQRVvoxMfooAo" crossorigin="anonymous"></script>
