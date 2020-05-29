@@ -32,7 +32,7 @@ $ pip install -r requirements.txt
 
 Instead, you can also download them by running this:
 ```sh
-$ bash download_models.sh
+$ bash get_pretrained_models.sh
 ```
 
 # 2. How to use BioELMo + CRF model

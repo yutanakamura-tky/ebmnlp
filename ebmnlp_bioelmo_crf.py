@@ -617,6 +617,128 @@ class EBMNLPTagger(pl.LightningModule):
 
 
 
+class EBMNLPBioBERTTagger(EBMNLPTagger):
+    def __init__(self, hparams): 
+        """
+        input:
+            hparams: dict
+               {'config' : config
+                'bioelmo' : allennlp.module.elmo.Elmo
+                'hidden_to_tag' : torch.nn.Linear
+                'crf': allennlp.modules.conditional_random_field.ConditionalRandomField
+                'itol': dict
+                'dl_train': torch.utils.data.DataLoader 
+                'dl_val': torch.utils.data.DataLoader
+                'dl_test': torch.utils.data.DataLoader
+               }
+        """
+        super().__init__(hparams)
+        self.hparams = hparams
+        self.itol = ID_TO_LABEL
+
+        # Load Pretrained BioELMo
+        DIR_ELMo = Path(str(self.hparams.bioelmo_dir))
+        self.bioelmo = Elmo(DIR_ELMo / 'biomed_elmo_options.json', DIR_ELMo / 'biomed_elmo_weights.hdf5', 1, requires_grad=bool(self.hparams.fine_tune_bioelmo), dropout=0)
+
+        # ELMo Padding token (In ELMo token with ID 0 is used for padding)
+        VOCAB_FILE_PATH = DIR_ELMo / 'vocab.txt'
+        command = shlex.split(f"head -n 1 {VOCAB_FILE_PATH}")
+        res = subprocess.Popen(command, stdout=subprocess.PIPE)
+        self.bioelmo_pad_token = res.communicate()[0].decode('utf-8').strip()
+
+        # Initialize Intermediate Affine Layer 
+        self.hidden_to_tag = nn.Linear(int(self.hparams.max_length), len(self.itol))
+
+        # Initialize CRF
+        TRANSITIONS = conditional_random_field.allowed_transitions(
+            constraint_type='BIO', labels=self.itol
+        )
+        self.crf = conditional_random_field.ConditionalRandomField(
+            # set to 7 because here "tags" means ['O', 'B-P', 'I-P', 'B-I', 'I-I', 'B-O', 'I-O']
+            # no need to include 'BOS' and 'EOS' in "tags"
+            num_tags=len(self.itol),
+            constraints=TRANSITIONS,
+            include_start_end_transitions=False
+        )
+        self.crf.reset_parameters()
+ 
+
+
+    def forward(self, tokens, tags=None, masks=None):
+        """
+        inputs:
+            tokens: list(list(str))
+            tags: torch.Tensor in size (n_batch, max_len)
+            masks: torch.Booltensor in size (n_batch, max_len)
+                Masks indicating the original sequences with True and padded sections with False.
+        outputs:
+            log_prob: torch.Tensor in size (1)
+                Log probability of the gold standard NER tagging calculated with sum-product algorithm.
+            Y: torch.Tensor in size(n_batch, max_len)
+                The most probable NER tagging sequence predicted with Viterbi algorithm.
+        """
+        # tokens: list(list(str))
+        # # check if tokens have the same lengths
+        lengths = [len(seq) for seq in tokens]
+        len_max = max(lengths)
+        len_min = min(lengths)
+
+        # # if tokens have different lengths, pad with self.bioelmo_pad_token
+        if len_max > len_min:
+            tokens = [seq + [self.bioelmo_pad_token] * (length - len_max) for seq, length in zip(tokens, lengths)]
+
+        if masks is None:
+            masks = torch.stack([torch.cat([torch.ones(length), torch.zeros(length - len_max)]).to(bool) for length in lengths])
+
+        
+        # character_ids: torch.tensor(n_batch, max_len)
+        character_ids = batch_to_ids(tokens)
+        character_ids = character_ids.to(self.get_device())
+
+        # characted_ids -> BioELMo hidden state of the last layer
+        # Turn on gradient tracking
+        out = self.bioelmo(character_ids)['elmo_representations'][-1]
+        out.requires_grad_()
+        
+        # Affine transformation (Hidden_dim -> N_tag)
+        out = self.hidden_to_tag(out)
+        
+
+        if tags is not None:
+            tags = tags.to(self.get_device())
+            masks = masks.to(self.get_device())
+        
+            # Log probability
+            log_prob = self.crf.forward(out, tags, masks)
+        
+            # top k=1 tagging
+            Y = [torch.tensor(result[0]) for result in self.crf.viterbi_tags(logits=out, mask=masks)]
+            Y = rnn.pack_sequence(Y, enforce_sorted=False)
+        
+            return log_prob, Y
+
+        else:
+            masks = masks.to(self.get_device())
+        
+            # top k=1 tagging
+            Y = [torch.tensor(result[0]) for result in self.crf.viterbi_tags(logits=out, mask=masks)]
+            Y = rnn.pack_sequence(Y, enforce_sorted=False)
+        
+            return Y
+
+
+    def configure_optimizers(self):
+        if self.hparams.fine_tune_bioelmo:
+            optimizer_bioelmo_1 = optim.Adam(self.bioelmo.parameters(), lr=float(self.harapms.lr_bioelmo))
+            optimizer_bioelmo_2 = optim.Adam(self.hidden_to_tag.parameters(), lr=float(self.hparams.lr_bioelmo))
+            optimizer_crf = optim.Adam(self.crf.parameters(), lr=float(self.hparams.lr))
+            return [optimizer_bioelmo_1, optimizer_bioelmo_2, optimizer_crf]
+        else:        
+            optimizer = optim.Adam(self.parameters(), lr=float(self.hparams.lr))
+            return optimizer
+
+
+
 # 3. Evaluation function
 
 def span_classification_report(T, Y, digits=4):
