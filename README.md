@@ -10,7 +10,7 @@ The method is Named Entity Recognition (NER) with BioELMo + CRF under PyTorch im
 $ git clone https://github.com/iBotamon/ebmnlp.git
 ```
 
-2. Activate Virtual Enviroment:
+2. Activate Virtual Environment:
 ```sh
 $ cd ebmnlp
 $ python -m venv .
