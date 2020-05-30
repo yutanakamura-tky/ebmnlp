@@ -279,7 +279,7 @@ class EBMNLPDataLoader(torch.utils.data.DataLoader):
             'tag' : torch.stack([sample['tag'] for sample in batch]),
             'mask' : torch.stack([sample['mask'] for sample in batch])
         }
-        super().__init__(**kwargs)
+        super().__init__(dataset, **kwargs)
 
 
 
