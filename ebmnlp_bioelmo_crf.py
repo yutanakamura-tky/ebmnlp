@@ -275,8 +275,9 @@ class EBMNLPDataLoader(torch.utils.data.DataLoader):
             'pmid' : torch.tensor([sample['pmid'] for sample in batch]),
             'text' : [sample['text'] for sample in batch],
             'tokens_nopad' : [sample['tokens_nopad'] for sample in batch],
-            'tag_nopad' : [sample['tag_nopad'] for sample in batch],
-            'tag' : torch.stack([sample['tag'] for sample in batch]),
+            'tokens' : [sample['tokens'] for sample in batch],
+            'tags_nopad' : [sample['tag_nopad'] for sample in batch],
+            'tags' : torch.stack([sample['tag'] for sample in batch]),
             'mask' : torch.stack([sample['mask'] for sample in batch])
         }
         super().__init__(dataset, **kwargs)
@@ -300,6 +301,7 @@ class EBMNLPTagger(pl.LightningModule):
         super().__init__()
         self.hparams = hparams
         self.itol = ID_TO_LABEL
+        self.ltoi = {v:k for k,v in self.itol.items()}
 
         # Load Pretrained BioELMo
         DIR_ELMo = Path(str(self.hparams.bioelmo_dir))
@@ -392,12 +394,15 @@ class EBMNLPTagger(pl.LightningModule):
         len_max = min(max(lengths), self.hparams.max_length)
         len_min = min(lengths)
 
-        # # if tokens have different lengths, pad with self.bioelmo_pad_token
-        if len_max > len_min:
-            tokens = [seq[:min(length, len_max)] + [self.bioelmo_pad_token] * max(0, len_max - length) for seq, length in zip(tokens, lengths)]
+        # # if sequences have different lengths, pad with self.bioelmo_pad_token
+        # # in addition, sequences longer than self.hparams.max_length will be truncated
+        tokens = [seq[:min(length, len_max)] + [self.bioelmo_pad_token] * max(0, len_max - length) for seq, length in zip(tokens, lengths)]
 
-        if masks is None:
-            masks = torch.stack([torch.cat([torch.ones(min(length, len_max)), torch.zeros(max(0, len_max - length))]).to(bool) for length in lengths])
+        tags = [seq[:min(length, len_max)] + [int(self.ltoi['O'])] * max(0, len_max - length) for seq, length in zip(tags, lengths)]
+        tags = torch.tensor(tags)
+
+        masks = torch.stack([torch.cat([torch.ones(min(length, len_max)), torch.zeros(max(0, len_max - length))]).to(bool) for length in lengths])
+        
 
         
         # character_ids: torch.tensor(n_batch, len_max)
@@ -443,19 +448,15 @@ class EBMNLPTagger(pl.LightningModule):
         # Caution: key for loss function must exactly be 'loss'.
         """
 
-        # DataLoader transposes tokens (max_len, n_batch), so transpose it again (n_batch, max_len)        
         tokens = batch['tokens']
-        tokens = np.array(tokens).T
-        n_batch = tokens.shape[0]
-        tokens = tokens.tolist()
+        tokens_nopad = batch['tokens_nopad']
+        tags_nopad = batch['tags_nopad']
 
-        tokens_nopad = [list(seq) for seq in batch['tokens_nopad']]
-
-        tags = batch['tag'].to(self.get_device())
+        tags = batch['tags'].to(self.get_device())
         masks = batch['mask'].to(self.get_device())
             
         # Negative Log Likelihood
-        log_prob, Y = self.forward(tokens, tags, masks)
+        log_prob, Y = self.forward(tokens_nopad, tags_nopad)
         returns = {'loss':log_prob * (-1.0), 'T':tags, 'Y':Y, 'I':batch['pmid']}
         return returns
     
@@ -508,18 +509,15 @@ class EBMNLPTagger(pl.LightningModule):
         """
         (batch) -> (dict or OrderedDict)
         """
-   
-        # DataLoader transposes tokens (max_len, n_batch), so transpose it again (n_batch, max_len)        
         tokens = batch['tokens']
-        tokens = np.array(tokens).T
-        n_batch = tokens.shape[0]
-        tokens = tokens.tolist()
-        
-        tags = batch['tag'].to(self.get_device())
+        tokens_nopad = batch['tokens_nopad']
+        tags_nopad = batch['tags_nopad']
+
+        tags = batch['tags'].to(self.get_device())
         masks = batch['mask'].to(self.get_device())
 
         # Negative Log Likelihood
-        log_prob, Y = self.forward(tokens, tags, masks)
+        log_prob, Y = self.forward(tokens_nopad, tags_nopad)
         returns = {'loss':log_prob * (-1.0), 'T':tags, 'Y':Y, 'I':batch['pmid']}
         return returns
 
@@ -563,17 +561,15 @@ class EBMNLPTagger(pl.LightningModule):
         """
         (batch) -> (dict or OrderedDict)
         """
-        # DataLoader transposes tokens (max_len, n_batch), so transpose it again (n_batch, max_len)        
         tokens = batch['tokens']
-        tokens = np.array(tokens).T
-        n_batch = tokens.shape[0]
-        tokens = tokens.tolist()
+        tokens_nopad = batch['tokens_nopad']
+        tags_nopad = batch['tags_nopad']
 
-        tags = batch['tag'].to(self.get_device())
+        tags = batch['tags'].to(self.get_device())
         masks = batch['mask'].to(self.get_device())
 
         # Negative Log Likelihood
-        log_prob, Y = self.forward(tokens, tags, masks)
+        log_prob, Y = self.forward(tokens_nopad, tags_nopad)
         returns = {'loss':log_prob * (-1.0), 'T':tags, 'Y':Y, 'I':batch['pmid']}
         return returns
 
