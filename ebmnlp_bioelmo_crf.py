@@ -399,10 +399,10 @@ class EBMNLPTagger(pl.LightningModule):
 
         # # if tokens have different lengths, pad with self.bioelmo_pad_token
         if len_max > len_min:
-            tokens = [seq + [self.bioelmo_pad_token] * (length - len_max) for seq, length in zip(tokens, lengths)]
+            tokens = [seq + [self.bioelmo_pad_token] * (len_max - length) for seq, length in zip(tokens, lengths)]
 
         if masks is None:
-            masks = torch.stack([torch.cat([torch.ones(length), torch.zeros(length - len_max)]).to(bool) for length in lengths])
+            masks = torch.stack([torch.cat([torch.ones(length), torch.zeros(len_max - length)]).to(bool) for length in lengths])
 
         
         # character_ids: torch.tensor(n_batch, max_len)
