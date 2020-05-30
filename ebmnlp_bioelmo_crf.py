@@ -175,7 +175,7 @@ def path_finder(top_dir):
     return paths
 
 
-# ### 1. Dataset
+# ### 1. Dataset, DataLoader
 
 class EBMNLPDataset(torch.utils.data.Dataset):
     def __init__(self, text_files, token_files, p_files, i_files, o_files, max_length, pad_token):
@@ -231,6 +231,7 @@ class EBMNLPDataset(torch.utils.data.Dataset):
             tokens = f.read().split()
             tokens_padded = tokens + [self.pad_token] * (self.max_length - len(tokens))
             returns['tokens'] = tokens_padded
+            returns['tokens_nopad'] = tokens
     
         with open(self.p_files[idx]) as f:
             # sequence of 0 (O-tag) or 1 (I-tag)
@@ -254,11 +255,33 @@ class EBMNLPDataset(torch.utils.data.Dataset):
         padding = torch.tensor([int(self.ltoi['O'])] * (self.max_length - seq_len))
         tag_padded = torch.cat([tag, padding])
         returns['tag'] = tag_padded
+        returns['tag_nopad'] = tag.numpy().tolist()
 
         mask = torch.cat([torch.ones_like(tag), torch.zeros_like(padding)]).to(bool)
         returns['mask'] = mask
 
         return returns
+
+
+class EBMNLPDataLoader(torch.utils.data.DataLoader):
+    def __init__(self, dataset, **kwargs):
+        """
+        text_files: list(str)
+        token_files: list(str)
+        p_files: list(str)
+        i_files: list(str)
+        o_files: list(str)
+        """
+        kwargs['collate_fn'] = lambda batch: {
+            'pmid' : torch.tensor([sample['pmid'] for sample in batch]),
+            'text' : [sample['text'] for sample in batch],
+            'tokens_nopad' : [sample['tokens_nopad'] for sample in batch],
+            'tag_nopad' : [sample['tag_nopad'] for sample in batch],
+            'tag' : torch.stack([sample['tag'] for sample in batch]),
+            'mask' : torch.stack([sample['mask'] for sample in batch])
+        }
+        super().__init__(**kwargs)
+
 
 
 
@@ -610,7 +633,7 @@ class EBMNLPTagger(pl.LightningModule):
         )
 
         ds_train, _ = train_test_split(ds_train_val, train_size=0.8, random_state=self.hparams.random_state)
-        dl_train = torch.utils.data.DataLoader(ds_train, batch_size=self.hparams.batch_size, shuffle=True)
+        dl_train = EBMNLPDataLoader(ds_train, batch_size=self.hparams.batch_size, shuffle=True)
         return dl_train
 
 
@@ -622,7 +645,7 @@ class EBMNLPTagger(pl.LightningModule):
         )
 
         _, ds_val = train_test_split(ds_train_val, train_size=0.8, random_state=self.hparams.random_state)
-        dl_val = torch.utils.data.DataLoader(ds_val, batch_size=self.hparams.batch_size, shuffle=False)
+        dl_val = EBMNLPDataLoader(ds_val, batch_size=self.hparams.batch_size, shuffle=False)
         return dl_val
 
 
@@ -632,7 +655,7 @@ class EBMNLPTagger(pl.LightningModule):
             self.hparams.max_length,
             self.bioelmo_pad_token
         )
-        dl_test = torch.utils.data.DataLoader(ds_test, batch_size=self.hparams.batch_size, shuffle=False)
+        dl_test = EBMNLPDataLoader(ds_test, batch_size=self.hparams.batch_size, shuffle=False)
         return dl_test
 
 
