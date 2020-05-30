@@ -55,7 +55,6 @@ def get_args():
     namespace = parser.parse_args()
     return namespace
 
-BIOELMO_
 
 # ### 0-2. Prepare for logging
 
@@ -291,16 +290,13 @@ class EBMNLPTagger(pl.LightningModule):
     def __init__(self, hparams): 
         """
         input:
-            hparams: dict
-               {'config' : config
-                'bioelmo' : allennlp.module.elmo.Elmo
-                'hidden_to_tag' : torch.nn.Linear
-                'crf': allennlp.modules.conditional_random_field.ConditionalRandomField
-                'itol': dict
-                'dl_train': torch.utils.data.DataLoader 
-                'dl_val': torch.utils.data.DataLoader
-                'dl_test': torch.utils.data.DataLoader
-               }
+            hparams: namespace with the following items:
+                'data_dir' (str): Data Directory. default: './official/ebm_nlp_1_00'
+                'bioelmo_dir' (str): BioELMo Directory. default: './models/bioelmo', help='BioELMo Directory')
+                'max_length' (int): Max Length. default: 1024
+                'lr' (float): Learning Rate. default: 1e-2
+                'fine_tune_bioelmo' (bool): Whether to Fine Tune BioELMo. default: False
+                'lr_bioelmo' (float): Learning Rate in BioELMo Fine-tuning. default: 1e-4
         """
         super().__init__()
         self.hparams = hparams
@@ -394,15 +390,15 @@ class EBMNLPTagger(pl.LightningModule):
         # tokens: list(list(str))
         # # check if tokens have the same lengths
         lengths = [len(seq) for seq in tokens]
-        len_max = max(lengths)
+        len_max = min(max(lengths), self.hparams.max_length)
         len_min = min(lengths)
 
         # # if tokens have different lengths, pad with self.bioelmo_pad_token
         if len_max > len_min:
-            tokens = [seq + [self.bioelmo_pad_token] * (len_max - length) for seq, length in zip(tokens, lengths)]
+            tokens = [seq[:min(length, len_max)] + [self.bioelmo_pad_token] * max(0, len_max - length) for seq, length in zip(tokens, lengths)]
 
         if masks is None:
-            masks = torch.stack([torch.cat([torch.ones(length), torch.zeros(len_max - length)]).to(bool) for length in lengths])
+            masks = torch.stack([torch.cat([torch.ones(min(length, len_max)), torch.zeros(max(0, len_max - length))]).to(bool) for length in lengths])
 
         
         # character_ids: torch.tensor(n_batch, max_len)
