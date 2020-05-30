@@ -55,7 +55,7 @@ def get_args():
     namespace = parser.parse_args()
     return namespace
 
-
+BIOELMO_
 
 # ### 0-2. Prepare for logging
 
@@ -317,7 +317,7 @@ class EBMNLPTagger(pl.LightningModule):
         self.bioelmo_pad_token = res.communicate()[0].decode('utf-8').strip()
 
         # Initialize Intermediate Affine Layer 
-        self.hidden_to_tag = nn.Linear(int(self.hparams.max_length), len(self.itol))
+        self.hidden_to_tag = nn.Linear(int(self.bioelmo.get_output_dim()), len(self.itol))
 
         # Initialize CRF
         TRANSITIONS = conditional_random_field.allowed_transitions(
