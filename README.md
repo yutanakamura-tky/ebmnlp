@@ -10,7 +10,7 @@ The method is Named Entity Recognition (NER) with BioELMo + CRF under PyTorch im
 $ git clone https://github.com/iBotamon/ebmnlp.git
 ```
 
-2. Activate Virtual Enviroment:
+2. Activate Virtual Environment:
 ```sh
 $ cd ebmnlp
 $ python -m venv .
@@ -32,7 +32,7 @@ $ pip install -r requirements.txt
 
 Instead, you can also download them by running this:
 ```sh
-$ bash download_models.sh
+$ bash get_pretrained_models.sh
 ```
 
 # 2. How to use BioELMo + CRF model
@@ -84,7 +84,17 @@ $ bash run_flask.sh
 # 3. How to train BioELMo + CRF model yourself
 1. Prepare EBM-NLP dataset `ebm_nlp_1_00.tar.gz` from [the repository by the authors](https://github.com/bepnye/EBM-NLP).
 
-2. Extract `ebm_nlp_1_00.tar.gz` in the `official` directory.
+2. Extract `ebm_nlp_1_00.tar.gz` in the `official` directory like this:
+```
+- models
+- templates
+- official
+  └ ebm_nlp_1_00
+    └ annotations
+      └ ..
+    └ documents
+      └ ..
+```
 
 3. Run this:
 ```sh
