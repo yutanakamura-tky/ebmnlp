@@ -56,7 +56,6 @@ def get_args():
     return namespace
 
 
-
 # ### 0-2. Prepare for logging
 
 def create_logger(exp_version):
@@ -232,8 +231,7 @@ class EBMNLPDataset(torch.utils.data.Dataset):
             tokens_padded = tokens + [self.pad_token] * (self.max_length - len(tokens))
             returns['tokens'] = tokens_padded
             returns['tokens_nopad'] = tokens
-
-
+    
         with open(self.p_files[idx]) as f:
             # sequence of 0 (O-tag) or 1 (I-tag)
             # e.g., '1,1,0,1,1,0,...'
@@ -291,16 +289,13 @@ class EBMNLPTagger(pl.LightningModule):
     def __init__(self, hparams): 
         """
         input:
-            hparams: dict
-               {'config' : config
-                'bioelmo' : allennlp.module.elmo.Elmo
-                'hidden_to_tag' : torch.nn.Linear
-                'crf': allennlp.modules.conditional_random_field.ConditionalRandomField
-                'itol': dict
-                'dl_train': torch.utils.data.DataLoader 
-                'dl_val': torch.utils.data.DataLoader
-                'dl_test': torch.utils.data.DataLoader
-               }
+            hparams: namespace with the following items:
+                'data_dir' (str): Data Directory. default: './official/ebm_nlp_1_00'
+                'bioelmo_dir' (str): BioELMo Directory. default: './models/bioelmo', help='BioELMo Directory')
+                'max_length' (int): Max Length. default: 1024
+                'lr' (float): Learning Rate. default: 1e-2
+                'fine_tune_bioelmo' (bool): Whether to Fine Tune BioELMo. default: False
+                'lr_bioelmo' (float): Learning Rate in BioELMo Fine-tuning. default: 1e-4
         """
         super().__init__()
         self.hparams = hparams
@@ -317,7 +312,7 @@ class EBMNLPTagger(pl.LightningModule):
         self.bioelmo_pad_token = res.communicate()[0].decode('utf-8').strip()
 
         # Initialize Intermediate Affine Layer 
-        self.hidden_to_tag = nn.Linear(int(self.hparams.max_length), len(self.itol))
+        self.hidden_to_tag = nn.Linear(int(self.bioelmo.get_output_dim()), len(self.itol))
 
         # Initialize CRF
         TRANSITIONS = conditional_random_field.allowed_transitions(
@@ -394,15 +389,15 @@ class EBMNLPTagger(pl.LightningModule):
         # tokens: list(list(str))
         # # check if tokens have the same lengths
         lengths = [len(seq) for seq in tokens]
-        len_max = max(lengths)
+        len_max = min(max(lengths), self.hparams.max_length)
         len_min = min(lengths)
 
         # # if tokens have different lengths, pad with self.bioelmo_pad_token
         if len_max > len_min:
-            tokens = [seq + [self.bioelmo_pad_token] * (length - len_max) for seq, length in zip(tokens, lengths)]
+            tokens = [seq[:min(length, len_max)] + [self.bioelmo_pad_token] * max(0, len_max - length) for seq, length in zip(tokens, lengths)]
 
         if masks is None:
-            masks = torch.stack([torch.cat([torch.ones(length), torch.zeros(length - len_max)]).to(bool) for length in lengths])
+            masks = torch.stack([torch.cat([torch.ones(min(length, len_max)), torch.zeros(max(0, len_max - length))]).to(bool) for length in lengths])
 
         
         # character_ids: torch.tensor(n_batch, len_max)
