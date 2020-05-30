@@ -1,6 +1,7 @@
 absl-py==0.9.0
 alabaster==0.7.12
 allennlp==0.9.0
+astunparse==1.6.3
 attrs==19.3.0
 Babel==2.8.0
 backcall==0.1.0
@@ -27,9 +28,11 @@ Flask==1.1.2
 Flask-Cors==3.0.8
 ftfy==5.7
 future==0.18.2
+gast==0.3.3
 gevent==20.5.2
 google-auth==1.16.0
 google-auth-oauthlib==0.4.1
+google-pasta==0.2.0
 greenlet==0.4.15
 grpcio==1.29.0
 h5py==2.10.0
@@ -67,6 +70,7 @@ notebook==6.0.3
 numpy==1.18.2
 numpydoc==1.0.0
 oauthlib==3.1.0
+opt-einsum==3.2.1
 overrides==3.0.0
 packaging==20.4
 pandocfilters==1.4.2
@@ -122,6 +126,9 @@ srsly==1.0.2
 tensorboard==2.2.2
 tensorboard-plugin-wit==1.6.0.post3
 tensorboardX==2.0
+tensorflow==2.2.0
+tensorflow-estimator==2.2.0
+termcolor==1.1.0
 terminado==0.8.3
 testpath==0.4.4
 thinc==7.0.8
@@ -140,6 +147,7 @@ webencodings==0.5.1
 Werkzeug==1.0.1
 widgetsnbextension==3.5.1
 word2number==1.1
+wrapt==1.12.1
 zipp==3.1.0
 zope.event==4.4
 zope.interface==5.1.0
