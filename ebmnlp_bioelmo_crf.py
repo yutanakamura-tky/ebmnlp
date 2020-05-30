@@ -404,7 +404,6 @@ class EBMNLPTagger(pl.LightningModule):
         masks = torch.stack([torch.cat([torch.ones(min(length, len_max)), torch.zeros(max(0, len_max - length))]).to(bool) for length in lengths])
         
 
-        
         # character_ids: torch.tensor(n_batch, len_max)
         character_ids = batch_to_ids(tokens)
         character_ids = character_ids.to(self.get_device())
@@ -447,14 +446,9 @@ class EBMNLPTagger(pl.LightningModule):
         (batch) -> (dict or OrderedDict)
         # Caution: key for loss function must exactly be 'loss'.
         """
-
-        tokens = batch['tokens']
         tokens_nopad = batch['tokens_nopad']
         tags_nopad = batch['tags_nopad']
 
-        tags = batch['tags'].to(self.get_device())
-        masks = batch['mask'].to(self.get_device())
-            
         # Negative Log Likelihood
         log_prob, Y = self.forward(tokens_nopad, tags_nopad)
         returns = {'loss':log_prob * (-1.0), 'T':tags, 'Y':Y, 'I':batch['pmid']}
@@ -509,12 +503,8 @@ class EBMNLPTagger(pl.LightningModule):
         """
         (batch) -> (dict or OrderedDict)
         """
-        tokens = batch['tokens']
         tokens_nopad = batch['tokens_nopad']
         tags_nopad = batch['tags_nopad']
-
-        tags = batch['tags'].to(self.get_device())
-        masks = batch['mask'].to(self.get_device())
 
         # Negative Log Likelihood
         log_prob, Y = self.forward(tokens_nopad, tags_nopad)
@@ -561,12 +551,8 @@ class EBMNLPTagger(pl.LightningModule):
         """
         (batch) -> (dict or OrderedDict)
         """
-        tokens = batch['tokens']
         tokens_nopad = batch['tokens_nopad']
         tags_nopad = batch['tags_nopad']
-
-        tags = batch['tags'].to(self.get_device())
-        masks = batch['mask'].to(self.get_device())
 
         # Negative Log Likelihood
         log_prob, Y = self.forward(tokens_nopad, tags_nopad)
