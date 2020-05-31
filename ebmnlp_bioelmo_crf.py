@@ -180,7 +180,7 @@ def path_finder(top_dir):
 # ### 1. Dataset, DataLoader
 
 class EBMNLPDataset(torch.utils.data.Dataset):
-    def __init__(self, text_files, token_files, p_files, i_files, o_files, max_length, pad_token):
+    def __init__(self, text_files, token_files, p_files, i_files, o_files):
         """
         text_files: list(str)
         token_files: list(str)
@@ -204,9 +204,6 @@ class EBMNLPDataset(torch.utils.data.Dataset):
         self.ltoi = {
             self.itol[i]:i for i in range(len(self.itol))
         }
-        
-        self.max_length = max_length
-        self.pad_token = pad_token
 
     def __len__(self):
         return self.n
@@ -231,8 +228,6 @@ class EBMNLPDataset(torch.utils.data.Dataset):
             #  'short-term', 'low-dose', 'triple', 'therapy', 'for',
             #  'Helicobacter', 'pylori', 'infection', '.', ...
             tokens = f.read().split()
-            tokens_padded = tokens + [self.pad_token] * (self.max_length - len(tokens))
-            returns['tokens'] = tokens_padded
             returns['tokens_nopad'] = tokens
     
         with open(self.p_files[idx]) as f:
@@ -252,15 +247,7 @@ class EBMNLPDataset(torch.utils.data.Dataset):
 
         # torch.tensor of IBO1 tag (e.g., ([0,6,5,5,5,0,0,4,3,3,3,0,0,...]))
         tag = integrate_pio(p, i, o, self.ltoi)
-
-        seq_len = tag.shape[0]
-        padding = torch.tensor([int(self.ltoi['O'])] * (self.max_length - seq_len))
-        tag_padded = torch.cat([tag, padding])
-        returns['tag'] = tag_padded
         returns['tag_nopad'] = tag.numpy().tolist()
-
-        mask = torch.cat([torch.ones_like(tag), torch.zeros_like(padding)]).to(bool)
-        returns['mask'] = mask
 
         return returns
 
@@ -278,10 +265,7 @@ class EBMNLPDataLoader(torch.utils.data.DataLoader):
             'pmid' : torch.tensor([sample['pmid'] for sample in batch]),
             'text' : [sample['text'] for sample in batch],
             'tokens_nopad' : [sample['tokens_nopad'] for sample in batch],
-            'tokens' : [sample['tokens'] for sample in batch],
-            'tags_nopad' : [sample['tag_nopad'] for sample in batch],
-            'tags' : torch.stack([sample['tag'] for sample in batch]),
-            'mask' : torch.stack([sample['mask'] for sample in batch])
+            'tags_nopad' : [sample['tag_nopad'] for sample in batch]
         }
         super().__init__(dataset, **kwargs)
 
@@ -405,7 +389,7 @@ class EBMNLPTagger(pl.LightningModule):
         if gold_tags is not None:
             gold_tags = [torch.tensor(seq) for seq in gold_tags]
             gold_tags_padded = rnn.pad_sequence(gold_tags, batch_first=True, padding_value=self.ltoi['O'])
-            gold_tags_padded = gold_tags_padded[:, :self.hparams.max_length, :]
+            gold_tags_padded = gold_tags_padded[:, :self.hparams.max_length]
             gold_tags_padded = gold_tags_padded.to(self.get_device())
         else:
             gold_tags_padded = None
@@ -614,11 +598,7 @@ class EBMNLPTagger(pl.LightningModule):
 
 
     def train_dataloader(self):
-        ds_train_val = EBMNLPDataset(
-            *path_finder(self.hparams.data_dir)['train'],
-            self.hparams.max_length,
-            self.bioelmo_pad_token
-        )
+        ds_train_val = EBMNLPDataset(*path_finder(self.hparams.data_dir)['train'])
 
         ds_train, _ = train_test_split(ds_train_val, train_size=0.8, random_state=self.hparams.random_state)
         dl_train = EBMNLPDataLoader(ds_train, batch_size=self.hparams.batch_size, shuffle=True)
@@ -626,11 +606,7 @@ class EBMNLPTagger(pl.LightningModule):
 
 
     def val_dataloader(self):
-        ds_train_val = EBMNLPDataset(
-            *path_finder(self.hparams.data_dir)['train'],
-            self.hparams.max_length,
-            self.bioelmo_pad_token
-        )
+        ds_train_val = EBMNLPDataset(*path_finder(self.hparams.data_dir)['train'])
 
         _, ds_val = train_test_split(ds_train_val, train_size=0.8, random_state=self.hparams.random_state)
         dl_val = EBMNLPDataLoader(ds_val, batch_size=self.hparams.batch_size, shuffle=False)
@@ -638,11 +614,7 @@ class EBMNLPTagger(pl.LightningModule):
 
 
     def test_dataloader(self):
-        ds_test = EBMNLPDataset(
-            *path_finder(self.hparams.data_dir)['test'],
-            self.hparams.max_length,
-            self.bioelmo_pad_token
-        )
+        ds_test = EBMNLPDataset(*path_finder(self.hparams.data_dir)['test'])
         dl_test = EBMNLPDataLoader(ds_test, batch_size=self.hparams.batch_size, shuffle=False)
         return dl_test
 
@@ -696,7 +668,6 @@ class EBMNLPBioBERTTagger(EBMNLPTagger):
 
         wordpiece_tokenize = lambda x: list(itertools.chain(*map(self.berttokenizer.tokenize, x)))
         subwords = list(map(wordpiece_tokenize, tokens))
-
 
 
         # subwords -> input_ids with [CLS], [SEP] and [PAD] tokens 
