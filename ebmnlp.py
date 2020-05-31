@@ -30,7 +30,7 @@ def main():
         ebmnlp.to('cuda')
 
     tokens = nltk.word_tokenize(abstract)
-    tags = ebmnlp.unpack_pred_tags(ebmnlp.forward([tokens]))
+    tags = ebmnlp.unpack_pred_tags(ebmnlp.forward([tokens])['pred_tags_packed'])
     tagging = [(tag, token) for tag, token in zip(tags[0], tokens)]
     result_str = '\n'.join([f'{tg[0]}\t{tg[1]}' for tg in tagging])
 
