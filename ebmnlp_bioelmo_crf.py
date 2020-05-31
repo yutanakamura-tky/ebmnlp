@@ -44,6 +44,7 @@ def get_args():
     parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument('--debug', '--debug-mode', action='store_true', dest='debug_mode', help='Set this option for debug mode')
     parser.add_argument('-d', '--dir', '--data-dir', dest='data_dir', type=str, default='./official/ebm_nlp_1_00', help='Data Directory')
+    parser.add_argument('--model', default='bioelmo', dest='model', type=str, help='bioelmo or biobert')
     parser.add_argument('--bioelmo-dir', dest='bioelmo_dir', type=str, default='./models/bioelmo', help='BioELMo Directory')
     parser.add_argument('--biobert-dir', dest='biobert_dir', type=str, default='./models/bioelmo/biobert/biobert_v1.0_pubmed_pmc', help='BioBERT Directory')
     parser.add_argument('-v', '--version', dest='version', type=str, help='Experiment Name')
@@ -52,6 +53,8 @@ def get_args():
     parser.add_argument('-l', '--lr', dest='lr', type=float, default='1e-2', help='Learning Rate (Default: 1e-2)')
     parser.add_argument('--fine-tune-bioelmo', action='store_true', dest='fine_tune_bioelmo', help='Whether to Fine Tune BioELMo')
     parser.add_argument('--lr-bioelmo', dest='lr_bioelmo', type=float, default='1e-4', help='Learning Rate in BioELMo Fine-tuning')
+    parser.add_argument('--fine-tune-biobert', action='store_true', dest='fine_tune_biobert', help='Whether to Fine Tune BioELMo')
+    parser.add_argument('--lr-biobert', dest='lr_biobert', type=float, default='2e-5', help='Learning Rate in BioELMo Fine-tuning')
     parser.add_argument('-b', '--batch-size', dest='batch_size', type=int, default='16', help='Batch size (Default: 16)')
     parser.add_argument('-c', '--cuda', dest='cuda', default=None, help='CUDA Device Number')
     parser.add_argument('-r', '--random-state', dest='random_state', type=int, default='42', help='Random state (Default: 42)')
@@ -228,7 +231,7 @@ class EBMNLPDataset(torch.utils.data.Dataset):
             #  'short-term', 'low-dose', 'triple', 'therapy', 'for',
             #  'Helicobacter', 'pylori', 'infection', '.', ...
             tokens = f.read().split()
-            returns['tokens_nopad'] = tokens
+            returns['tokens'] = tokens
     
         with open(self.p_files[idx]) as f:
             # sequence of 0 (O-tag) or 1 (I-tag)
@@ -247,7 +250,7 @@ class EBMNLPDataset(torch.utils.data.Dataset):
 
         # torch.tensor of IBO1 tag (e.g., ([0,6,5,5,5,0,0,4,3,3,3,0,0,...]))
         tag = integrate_pio(p, i, o, self.ltoi)
-        returns['tag_nopad'] = tag.numpy().tolist()
+        returns['tags'] = tag.numpy().tolist()
 
         return returns
 
@@ -264,8 +267,8 @@ class EBMNLPDataLoader(torch.utils.data.DataLoader):
         kwargs['collate_fn'] = lambda batch: {
             'pmid' : torch.tensor([sample['pmid'] for sample in batch]),
             'text' : [sample['text'] for sample in batch],
-            'tokens_nopad' : [sample['tokens_nopad'] for sample in batch],
-            'tags_nopad' : [sample['tag_nopad'] for sample in batch]
+            'tokens' : [sample['tokens'] for sample in batch],
+            'tags' : [sample['tags'] for sample in batch]
         }
         super().__init__(dataset, **kwargs)
 
@@ -399,8 +402,8 @@ class EBMNLPTagger(pl.LightningModule):
 
 
     def step(self, batch, batch_nb, *optimizer_idx):
-        tokens_nopad = batch['tokens_nopad']
-        tags_nopad = batch['tags_nopad']
+        tokens_nopad = batch['tokens']
+        tags_nopad = batch['tags']
 
         # Negative Log Likelihood
         result = self.forward(tokens_nopad, tags_nopad)
@@ -589,7 +592,7 @@ class EBMNLPTagger(pl.LightningModule):
     def configure_optimizers(self):
         if self.hparams.fine_tune_bioelmo:
             optimizer_bioelmo_1 = optim.Adam(self.bioelmo.parameters(), lr=float(self.harapms.lr_bioelmo))
-            optimizer_bioelmo_2 = optim.Adam(self.affine.parameters(), lr=float(self.hparams.lr_bioelmo))
+            optimizer_bioelmo_2 = optim.Adam(self.hidden_to_tag.parameters(), lr=float(self.hparams.lr_bioelmo))
             optimizer_crf = optim.Adam(self.crf.parameters(), lr=float(self.hparams.lr))
             return [optimizer_bioelmo_1, optimizer_bioelmo_2, optimizer_crf]
         else:        
@@ -681,21 +684,14 @@ class EBMNLPBioBERTTagger(EBMNLPTagger):
             pad_to_max_length=True
         )
 
-        # # character_ids: torch.tensor(n_batch, len_max)
-        # character_ids = batch_to_ids(tokens)
-        # character_ids = character_ids[:, :self.hparams.max_length, :]
-        # character_ids = character_ids.to(self.get_device())
-
-        # # characted_ids -> BioELMo hidden state of the last layer & mask
-        # out = self.bioelmo(character_ids)
 
         # Turn on gradient tracking
         # Affine transformation (Hidden_dim -> N_tag)
-        hidden = out['elmo_representations'][-1]
-        hidden.requires_grad_()
-        hidden = self.hidden_to_tag(hidden)
+        # hidden = hogehoge
+        # hidden.requires_grad_()
+        # hidden = self.hidden_to_tag(hidden)
 
-        # # crf_mask = out['mask'].to(torch.bool).to(self.get_device())
+        # # crf_mask = hogehoge
 
         if gold_tags is not None:
             gold_tags = [torch.tensor(seq) for seq in gold_tags]
@@ -759,11 +755,11 @@ class EBMNLPBioBERTTagger(EBMNLPTagger):
 
 
     def configure_optimizers(self):
-        if self.hparams.fine_tune_bioelmo:
-            optimizer_bioelmo_1 = optim.Adam(self.biobert.parameters(), lr=float(self.harapms.lr_biobert))
-            optimizer_bioelmo_2 = optim.Adam(self.affine.parameters(), lr=float(self.hparams.lr_biobert))
+        if self.hparams.fine_tune_biobert:
+            optimizer_biobert_1 = optim.Adam(self.biobert.parameters(), lr=float(self.harapms.lr_biobert))
+            optimizer_biobert_2 = optim.Adam(self.hidden_to_tag.parameters(), lr=float(self.hparams.lr_biobert))
             optimizer_crf = optim.Adam(self.crf.parameters(), lr=float(self.hparams.lr))
-            return [optimizer_bioelmo_1, optimizer_bioelmo_2, optimizer_crf]
+            return [optimizer_biobert_1, optimizer_biobert_2, optimizer_crf]
         else:        
             optimizer = optim.Adam(self.parameters(), lr=float(self.hparams.lr))
             return optimizer
@@ -804,9 +800,10 @@ def main():
     
     
     # ### 4-1. DataLoader -> BioELMo -> CRF
-    
-    ebmnlp = EBMNLPTagger(config)
-
+    if config.model == 'bioelmo':
+        ebmnlp = EBMNLPTagger(config)
+    elif config.model == 'biobert':
+        ebmnlp = EBMNLPBioBERTTagger(config)
 
     # ### 4-2. Training
     if config.cuda is None:
@@ -816,8 +813,13 @@ def main():
 
     ebmnlp.to(device)
 
+    MODEL_CHECK_POINT_PATH = {
+        'bioelmo' : './models/ebmnlp_bioelmo_crf/ebmnlp_bioelmo_crf.ckpt',
+        'biobert' : './models/ebmnlp_biobert_crf/ebmnlp_biobert_crf.ckpt'
+    }
+
     checkpoint_callback = pl.callbacks.ModelCheckpoint(
-        filepath='./models/ebmnlp_bioelmo_crf/ebmnlp_bioelmo_crf.ckpt'
+        filepath=MODEL_CHECK_POINT_PATH[config.model]
     )
 
     trainer = pl.Trainer(
