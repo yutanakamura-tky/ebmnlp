@@ -337,46 +337,6 @@ class EBMNLPTagger(pl.LightningModule):
     def get_device(self):
         return self.crf.state_dict()['transitions'].device
    
-   
-    def unpack_pred_tags(self, Y_packed):
-        """
-        input:
-            Y_packed: torch.nn.utils.rnn.PackedSequence
-        output:
-            Y: list(list(str))
-                Predicted NER tagging sequence.
-        """
-        Y_padded, Y_len = rnn.pad_packed_sequence(Y_packed, batch_first=True, padding_value=-1)
-        Y_padded = Y_padded.numpy().tolist()
-        Y_len = Y_len.numpy().tolist()
-
-        # Replace B- tag with I- tag because the original paper defines the NER task as identification of spans, not entities
-        Y = [[self.itol[ix].replace('B-', 'I-') for ix in ids[:length]] for ids, length in zip(Y_padded, Y_len)]
-
-        return Y
-
-
-    def unpack_gold_and_pred_tags(self, T_padded, Y_packed):
-        """
-        input:
-            T_padded: torch.tensor
-            Y_packed: torch.nn.utils.rnn.PackedSequence
-        output:
-            T: list(list(str))
-                Gold NER tagging sequence.
-            Y: list(list(str))
-                Predicted NER tagging sequence.
-        """
-        Y = self.unpack_pred_tags(Y_packed)
-        Y_len = [len(seq) for seq in Y]
-
-        T_padded = T_padded.numpy().tolist()
-
-        # Replace B- tag with I- tag because the original paper defines the NER task as identification of spans, not entities
-        T = [[self.itol[ix].replace('B-', 'I-') for ix in ids[:length]] for ids, length in zip(T_padded, Y_len)]
-        
-        return T, Y
-
 
     def _forward_crf(self, hidden, gold_tags_padded, crf_mask):
         """
@@ -469,6 +429,73 @@ class EBMNLPTagger(pl.LightningModule):
         return returns 
 
 
+    def unpack_pred_tags(self, Y_packed):
+        """
+        input:
+            Y_packed: torch.nn.utils.rnn.PackedSequence
+        output:
+            Y: list(list(str))
+                Predicted NER tagging sequence.
+        """
+        Y_padded, Y_len = rnn.pad_packed_sequence(Y_packed, batch_first=True, padding_value=-1)
+        Y_padded = Y_padded.numpy().tolist()
+        Y_len = Y_len.numpy().tolist()
+
+        # Replace B- tag with I- tag because the original paper defines the NER task as identification of spans, not entities
+        Y = [[self.itol[ix].replace('B-', 'I-') for ix in ids[:length]] for ids, length in zip(Y_padded, Y_len)]
+
+        return Y
+
+
+    def unpack_gold_and_pred_tags(self, T_padded, Y_packed):
+        """
+        input:
+            T_padded: torch.tensor
+            Y_packed: torch.nn.utils.rnn.PackedSequence
+        output:
+            T: list(list(str))
+                Gold NER tagging sequence.
+            Y: list(list(str))
+                Predicted NER tagging sequence.
+        """
+        Y = self.unpack_pred_tags(Y_packed)
+        Y_len = [len(seq) for seq in Y]
+
+        T_padded = T_padded.numpy().tolist()
+
+        # Replace B- tag with I- tag because the original paper defines the NER task as identification of spans, not entities
+        T = [[self.itol[ix].replace('B-', 'I-') for ix in ids[:length]] for ids, length in zip(T_padded, Y_len)]
+        
+        return T, Y
+
+
+    def gather_outputs(self, outputs):
+        if len(outputs) > 1:
+            loss = torch.mean(torch.tensor([output['loss'] for output in outputs]))
+        else:
+            loss = torch.mean(outputs[0]['loss'])
+        
+        I = []
+        Y = []
+        T = []
+        
+        for output in outputs:
+            T_batch, Y_batch = self.unpack_gold_and_pred_tags(output['T'].cpu(), output['Y'].cpu())
+            T += T_batch
+            Y += Y_batch
+            I += output['I'].cpu().numpy().tolist()
+
+        returns = {
+            'loss':loss,
+            'T':T,
+            'Y':Y,
+            'I':I
+        }
+
+        return returns
+
+
+
     def training_step(self, batch, batch_nb, *optimizer_idx):
         # Process on individual mini-batches
         """
@@ -495,20 +522,11 @@ class EBMNLPTagger(pl.LightningModule):
         outputs(list of dict) -> loss(dict or OrderedDict)
         # Caution: key must exactly be 'loss'.
         """
-        if len(outputs) > 1:
-            loss = torch.mean(torch.tensor([output['loss'] for output in outputs]))
-        else:
-            loss = torch.mean(outputs[0]['loss'])
-        
-        I = []
-        Y = []
-        T = []
-        
-        for output in outputs:
-            T_batch, Y_batch = self.unpack_gold_and_pred_tags(output['T'].cpu(), output['Y'].cpu())
-            T += T_batch
-            Y += Y_batch
-            I += output['I'].cpu().numpy().tolist()
+        outs = self.gather_outputs(outputs)
+        loss = outs['loss']
+        I = outs['I']
+        Y = outs['Y']
+        T = outs['T']
 
         get_logger(self.hparams.version).info(f'========== Training Epoch {self.current_epoch} ==========')
         get_logger(self.hparams.version).info(f'Loss: {loss.item()}')
@@ -537,21 +555,11 @@ class EBMNLPTagger(pl.LightningModule):
         For multiple dataloaders:
             outputs(list of (list of dict)) -> (dict or OrderedDict)
         """  
-
-        if len(outputs) > 1:
-            loss = torch.mean(torch.tensor([output['loss'] for output in outputs]))
-        else:
-            loss = torch.mean(outputs[0]['loss'])
-        
-        I = []
-        Y = []
-        T = []
-        
-        for output in outputs:
-            T_batch, Y_batch = self.unpack_gold_and_pred_tags(output['T'].cpu(), output['Y'].cpu())
-            T += T_batch
-            Y += Y_batch
-            I += output['I'].cpu().numpy().tolist()
+        outs = self.gather_outputs(outputs)
+        loss = outs['loss']
+        I = outs['I']
+        Y = outs['Y']
+        T = outs['T']
             
         get_logger(self.hparams.version).info(f'========== Validation Epoch {self.current_epoch} ==========')
         get_logger(self.hparams.version).info(f'Loss: {loss.item()}')
@@ -578,21 +586,11 @@ class EBMNLPTagger(pl.LightningModule):
         For multiple dataloaders:
             outputs(list of (list of dict)) -> (dict or OrderedDict)
         """
-
-        if len(outputs) > 1:
-            loss = torch.mean(torch.tensor([output['loss'] for output in outputs]))
-        else:
-            loss = torch.mean(outputs[0]['loss'])
-
-        I = []
-        Y = []
-        T = []
-
-        for output in outputs:
-            T_batch, Y_batch = self.unpack_gold_and_pred_tags(output['T'].cpu(), output['Y'].cpu())
-            T += T_batch
-            Y += Y_batch
-            I += output['I'].cpu().numpy().tolist()
+        outs = self.gather_outputs(outputs)
+        loss = outs['loss']
+        I = outs['I']
+        Y = outs['Y']
+        T = outs['T']
 
         get_logger(self.hparams.version).info(f'========== Test ==========')
         get_logger(self.hparams.version).info(f'Loss: {loss.item()}')

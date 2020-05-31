@@ -23,6 +23,6 @@ def predict():
         ebmnlp.to('cuda')
 
     tokens = nltk.word_tokenize(abstract)
-    tags = ebmnlp.unpack_pred_tags(ebmnlp.forward([tokens]))
+    tags = ebmnlp.unpack_pred_tags(ebmnlp.forward([tokens])['pred_tags_packed'])
     tagging = [(tag, token) for tag, token in zip(tags[0], tokens)]
     return render_template('sample.html', tagging=tagging, cuda_is_available=torch.cuda.is_available(), show_legend=True)
