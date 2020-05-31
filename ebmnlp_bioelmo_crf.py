@@ -386,6 +386,9 @@ class EBMNLPTagger(pl.LightningModule):
             crf_mask (torch.bool) (n_batch, seq_length)
         output:
             result (dict)
+                'log_likelihood' : torch.tensor
+                'pred_tags_packed' : torch.nn.utils.rnn.PackedSequence
+                'gold_tags_padded' : torch.tensor
         """
         result = {}
 
@@ -413,15 +416,15 @@ class EBMNLPTagger(pl.LightningModule):
 
     def forward(self, tokens, gold_tags=None):
         """
-        inputs:
-            tokens: list(list(str))
-            gold_tags: list(list(int))
-
-        outputs:
-            log_prob: torch.Tensor in size (1)
-                Log probability of the gold standard NER tagging calculated with sum-product algorithm.
-            Y: torch.Tensor in size(n_batch, max_len)
-                The most probable NER tagging sequence predicted with Viterbi algorithm.
+        input:
+            hidden (torch.tensor) (n_batch, seq_length, hidden_dim)
+            gold_tags_padded (torch.tensor) (n_batch, seq_length)
+            crf_mask (torch.bool) (n_batch, seq_length)
+        output:
+            result (dict)
+                'log_likelihood' : torch.tensor
+                'pred_tags_packed' : torch.nn.utils.rnn.PackedSequence
+                'gold_tags_padded' : torch.tensor
         """
         # character_ids: torch.tensor(n_batch, len_max)
         character_ids = batch_to_ids(tokens)
@@ -442,6 +445,7 @@ class EBMNLPTagger(pl.LightningModule):
         if gold_tags is not None:
             gold_tags = [torch.tensor(seq) for seq in gold_tags]
             gold_tags_padded = rnn.pad_sequence(gold_tags, batch_first=True, padding_value=self.ltoi['O'])
+            gold_tags_padded = gold_tags_padded[:, :self.hparams.max_length, :]
             gold_tags_padded = gold_tags_padded.to(self.get_device())
         else:
             gold_tags_padded = None
@@ -673,22 +677,21 @@ class EBMNLPBioBERTTagger(EBMNLPTagger):
         self.biobert_output_dim = self.bertconfig.hidden_size
 
         # Initialize Intermediate Affine Layer 
-        self.affine = nn.Linear(int(self.biobert_output_dim), len(self.itol))
+        self.hidden_to_tag = nn.Linear(int(self.biobert_output_dim), len(self.itol))
 
 
 
-    def forward(self, tokens, tags=None):
+    def forward(self, tokens, gold_tags=None):
         """
-        inputs:
-            tokens: list(list(str))
-            tags: torch.Tensor in size (n_batch, max_len)
-            masks: torch.Booltensor in size (n_batch, max_len)
-                Masks indicating the original sequences with True and padded sections with False.
-        outputs:
-            log_prob: torch.Tensor in size (1)
-                Log probability of the gold standard NER tagging calculated with sum-product algorithm.
-            Y: torch.Tensor in size(n_batch, max_len)
-                The most probable NER tagging sequence predicted with Viterbi algorithm.
+        input:
+            hidden (torch.tensor) (n_batch, seq_length, hidden_dim)
+            gold_tags_padded (torch.tensor) (n_batch, seq_length)
+            crf_mask (torch.bool) (n_batch, seq_length)
+        output:
+            result (dict)
+                'log_likelihood' : torch.tensor
+                'pred_tags_packed' : torch.nn.utils.rnn.PackedSequence
+                'gold_tags_padded' : torch.tensor
         """
         # tokens: list(list(str))
         # convert tokens into subwords by wordpiece tokenization
@@ -696,10 +699,49 @@ class EBMNLPBioBERTTagger(EBMNLPTagger):
         wordpiece_tokenize = lambda x: list(itertools.chain(*map(self.berttokenizer.tokenize, x)))
         subwords = list(map(wordpiece_tokenize, tokens))
 
-        # tokens: list(list(str))
-        # # check if tokens have the same lengths
+
+
+        # subwords -> input_ids with [CLS], [SEP] and [PAD] tokens 
         lengths = [len(seq) for seq in subwords]
         len_max = min(max(lengths), self.hparams.max_length, self.bertconfig.max_position_embeddings)
+
+        encode = self.berttokenizer.batch_encode_plus(
+            subwords, 
+            max_length=len_max,
+            is_pretokenized=True, 
+            pad_to_max_length=True
+        )
+
+        # # character_ids: torch.tensor(n_batch, len_max)
+        # character_ids = batch_to_ids(tokens)
+        # character_ids = character_ids[:, :self.hparams.max_length, :]
+        # character_ids = character_ids.to(self.get_device())
+
+        # # characted_ids -> BioELMo hidden state of the last layer & mask
+        # out = self.bioelmo(character_ids)
+
+        # Turn on gradient tracking
+        # Affine transformation (Hidden_dim -> N_tag)
+        hidden = out['elmo_representations'][-1]
+        hidden.requires_grad_()
+        hidden = self.hidden_to_tag(hidden)
+
+        # # crf_mask = out['mask'].to(torch.bool).to(self.get_device())
+
+        if gold_tags is not None:
+            gold_tags = [torch.tensor(seq) for seq in gold_tags]
+            gold_tags_padded = rnn.pad_sequence(gold_tags, batch_first=True, padding_value=self.ltoi['O'])
+            gold_tags_padded = gold_tags_padded[:, :len_max, :]
+            gold_tags_padded = gold_tags_padded.to(self.get_device())
+        else:
+            gold_tags_padded = None
+
+        result = self._forward_crf(hidden, gold_tags_padded, crf_mask)
+        return result
+
+
+        # tokens: list(list(str))
+        # # check if tokens have the same lengths
         len_min = min(lengths)
 
         # # if sequences have different lengths, pad with self.bioelmo_pad_token
@@ -710,13 +752,6 @@ class EBMNLPBioBERTTagger(EBMNLPTagger):
         crf_mask = torch.stack([torch.cat([torch.ones(min(length, len_max)), torch.zeros(max(0, len_max - length))]).to(bool) for length in lengths])
         
         
-        # subwords -> input_ids 
-        encode = self.berttokenizer.batch_encode_plus(
-            subwords, 
-            max_length=len_max, 
-            is_pretokenized=True, 
-            pad_to_max_length=True
-        )
 
         # input_ids -> hidden_state
         input_ids = torch.tensor(encode['input_ids']).to(self.get_device())
@@ -756,8 +791,8 @@ class EBMNLPBioBERTTagger(EBMNLPTagger):
 
     def configure_optimizers(self):
         if self.hparams.fine_tune_bioelmo:
-            optimizer_bioelmo_1 = optim.Adam(self.bioelmo.parameters(), lr=float(self.harapms.lr_bioelmo))
-            optimizer_bioelmo_2 = optim.Adam(self.affine.parameters(), lr=float(self.hparams.lr_bioelmo))
+            optimizer_bioelmo_1 = optim.Adam(self.biobert.parameters(), lr=float(self.harapms.lr_biobert))
+            optimizer_bioelmo_2 = optim.Adam(self.affine.parameters(), lr=float(self.hparams.lr_biobert))
             optimizer_crf = optim.Adam(self.crf.parameters(), lr=float(self.hparams.lr))
             return [optimizer_bioelmo_1, optimizer_bioelmo_2, optimizer_crf]
         else:        
