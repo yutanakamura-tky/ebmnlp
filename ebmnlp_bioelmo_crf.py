@@ -318,7 +318,7 @@ class EBMNLPTagger(pl.LightningModule):
         self.bioelmo_pad_token = res.communicate()[0].decode('utf-8').strip()
 
         # Initialize Intermediate Affine Layer 
-        self.affine = nn.Linear(int(self.bioelmo_output_dim), len(self.itol))
+        self.hidden_to_tag = nn.Linear(int(self.bioelmo_output_dim), len(self.itol))
 
         # Initialize CRF
         TRANSITIONS = conditional_random_field.allowed_transitions(
@@ -435,7 +435,7 @@ class EBMNLPTagger(pl.LightningModule):
         # Affine transformation (Hidden_dim -> N_tag)
         hidden = out['elmo_representations'][-1]
         hidden.requires_grad_()
-        hidden = self.affine(hidden)
+        hidden = self.hidden_to_tag(hidden)
 
         crf_mask = out['mask'].to(torch.bool).to(self.get_device())
 
@@ -471,17 +471,7 @@ class EBMNLPTagger(pl.LightningModule):
         (batch) -> (dict or OrderedDict)
         # Caution: key for loss function must exactly be 'loss'.
         """
-        tokens_nopad = batch['tokens_nopad']
-        tags_nopad = batch['tags_nopad']
-
-        result = self.forward(tokens_nopad, tags_nopad)
-        returns = {
-            'loss':result['log_likelihood'] * (-1.0),
-            'T':result['gold_tags_padded'],
-            'Y':result['pred_tags_packed'],
-            'I':batch['pmid']
-        }
-        return returns
+        return self.step(batch, batch_nb, *optimizer_idx)
     
 
     def training_step_end(self, outputs):
@@ -532,17 +522,7 @@ class EBMNLPTagger(pl.LightningModule):
         """
         (batch) -> (dict or OrderedDict)
         """
-        tokens_nopad = batch['tokens_nopad']
-        tags_nopad = batch['tags_nopad']
-
-        result = self.forward(tokens_nopad, tags_nopad)
-        returns = {
-            'loss':result['log_likelihood'] * (-1.0),
-            'T':result['gold_tags_padded'],
-            'Y':result['pred_tags_packed'],
-            'I':batch['pmid']
-        }
-        return returns
+        return self.step(batch, batch_nb)
 
     
     
@@ -584,17 +564,7 @@ class EBMNLPTagger(pl.LightningModule):
         """
         (batch) -> (dict or OrderedDict)
         """
-        tokens_nopad = batch['tokens_nopad']
-        tags_nopad = batch['tags_nopad']
-
-        result = self.forward(tokens_nopad, tags_nopad)
-        returns = {
-            'loss':result['log_likelihood'] * (-1.0),
-            'T':result['gold_tags_padded'],
-            'Y':result['pred_tags_packed'],
-            'I':batch['pmid']
-        }
-        return returns
+        return self.step(batch, batch_nb)
 
 
     def test_epoch_end(self, outputs):
