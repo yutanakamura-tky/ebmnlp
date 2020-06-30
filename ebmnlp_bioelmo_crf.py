@@ -591,7 +591,7 @@ class EBMNLPTagger(pl.LightningModule):
 
     def configure_optimizers(self):
         if self.hparams.fine_tune_bioelmo:
-            optimizer_bioelmo_1 = optim.Adam(self.bioelmo.parameters(), lr=float(self.harapms.lr_bioelmo))
+            optimizer_bioelmo_1 = optim.Adam(self.bioelmo.parameters(), lr=float(self.hparams.lr_bioelmo))
             optimizer_bioelmo_2 = optim.Adam(self.hidden_to_tag.parameters(), lr=float(self.hparams.lr_bioelmo))
             optimizer_crf = optim.Adam(self.crf.parameters(), lr=float(self.hparams.lr))
             return [optimizer_bioelmo_1, optimizer_bioelmo_2, optimizer_crf]
@@ -756,7 +756,7 @@ class EBMNLPBioBERTTagger(EBMNLPTagger):
 
     def configure_optimizers(self):
         if self.hparams.fine_tune_biobert:
-            optimizer_biobert_1 = optim.Adam(self.biobert.parameters(), lr=float(self.harapms.lr_biobert))
+            optimizer_biobert_1 = optim.Adam(self.biobert.parameters(), lr=float(self.hparams.lr_biobert))
             optimizer_biobert_2 = optim.Adam(self.hidden_to_tag.parameters(), lr=float(self.hparams.lr_biobert))
             optimizer_crf = optim.Adam(self.crf.parameters(), lr=float(self.hparams.lr))
             return [optimizer_biobert_1, optimizer_biobert_2, optimizer_crf]
