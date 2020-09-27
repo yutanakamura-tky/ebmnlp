@@ -6,7 +6,9 @@
 # ### 0-1. Dependencies
 
 import argparse
+import itertools
 import logging
+import math
 import os, random
 import re
 from pathlib import Path
@@ -653,6 +655,55 @@ class EBMNLPBioBERTTagger(EBMNLPTagger):
         self.hidden_to_tag = nn.Linear(int(self.biobert_output_dim), len(self.itol))
 
 
+    def bert_last_hidden_state_of_long_sequences(self, seqs):
+        # subwords -> input_ids with [CLS], [SEP] and [PAD] tokens 
+        lengths = [len(seq) for seq in seqs]
+
+        # preparation for long sequence
+        # window: length other than [CLS], [SEP]
+        window = min(self.hparams.max_length, self.bertconfig.max_position_embeddings - 2)
+        stride = window // 2
+        n_chunks = max(0, math.ceil((max(lengths) - window) / stride)) + 1
+
+        subword_chunks = [
+            [
+                seq[stride*i : stride*i + window] if len(seq[stride*i : stride*i + window]) > 0 else [''] for seq in subwords
+            ]
+            for i in range(n_chunks)
+        ]
+
+        # to token IDs
+
+        def bert_encode(seqs): 
+            result = {
+                k : torch.tensor(v)
+                for k, v in self.berttokenizer.batch_encode_plus(
+                    seqs,
+                    max_length=window+2,
+                    is_pretokenized=True,
+                    pad_to_max_length=True
+                ).items()
+            }
+            return result
+
+        encoded_chunks = list(map(bert_encode, subword_chunks))
+
+        # to GPU
+        encoded_chunks = list(
+            map(
+                lambda x:
+                    {
+                        k : v.to(self.get_device()) for k, v in x.items()
+                    },
+                encoded_chunks
+            )
+        )
+
+        # to BERT
+        outs = list(map(lambda chunk: self.biobert(**chunk)[0], encoded_chunks))
+
+        # 
+
 
     def forward(self, tokens, gold_tags=None):
         """
@@ -668,21 +719,9 @@ class EBMNLPBioBERTTagger(EBMNLPTagger):
         """
         # tokens: list(list(str))
         # convert tokens into subwords by wordpiece tokenization
-
         wordpiece_tokenize = lambda x: list(itertools.chain(*map(self.berttokenizer.tokenize, x)))
         subwords = list(map(wordpiece_tokenize, tokens))
 
-
-        # subwords -> input_ids with [CLS], [SEP] and [PAD] tokens 
-        lengths = [len(seq) for seq in subwords]
-        len_max = min(max(lengths), self.hparams.max_length, self.bertconfig.max_position_embeddings)
-
-        encode = self.berttokenizer.batch_encode_plus(
-            subwords, 
-            max_length=len_max,
-            is_pretokenized=True, 
-            pad_to_max_length=True
-        )
 
 
         # Turn on gradient tracking
